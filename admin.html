@@ -16,93 +16,24 @@
         <div class="brand-sub">SW Multichannel Challenge – Control Panel</div>
       </div>
     </div>
+
     <div class="top-right">
-      <a href="game.html" class="pill pill-user">Back to game</a>
+      <a href="game.html" class="ghost-button">Back to game</a>
     </div>
   </header>
 
-  <main class="main-wrapper main-admin-layout">
-    <!-- LOGIN CARD -->
-    <section id="adminLoginSection" class="card admin-login-card">
-      <h1>Admin Login</h1>
-      <p>
-        Enter the admin password to access area rolls, prize settings and player management.
-      </p>
-
-      <label class="field">
-        <span>Admin password</span>
-        <input
-          id="adminPasswordInput"
-          type="password"
-          autocomplete="off"
-          placeholder="Enter admin password"
-        />
-      </label>
-
-      <button id="btnAdminLogin" type="button" class="btn btn-primary">
-        Login
-      </button>
-
-      <p id="adminLoginStatus" class="status error-text"></p>
-
-      <button
-        id="btnShowChangePassword"
-        type="button"
-        class="btn btn-secondary btn-small"
-        style="margin-top: 10px;"
-      >
-        Change admin password
-      </button>
-      <p class="helper-text">
-        Use this if you need to update the admin password before logging in.
-      </p>
-    </section>
-
-    <!-- CHANGE PASSWORD CARD -->
-    <section
-      id="adminChangePasswordSection"
-      class="card admin-password-card hidden"
-    >
-      <h2>Change Admin Password</h2>
-      <p class="card-help">
-        Update the admin password stored in the backend. This replaces the existing password for all future logins.
-      </p>
-
-      <label class="field">
-        <span>New password</span>
-        <input
-          id="adminNewPasswordInput"
-          type="password"
-          autocomplete="off"
-          placeholder="Enter new admin password"
-        />
-      </label>
-
-      <button id="btnChangePassword" type="button" class="btn btn-primary">
-        Save password
-      </button>
-
-      <p id="adminChangePasswordStatus" class="status"></p>
-
-      <button
-        id="btnCancelPasswordChange"
-        type="button"
-        class="btn btn-secondary btn-small"
-        style="margin-top: 12px;"
-      >
-        Back to login
-      </button>
-    </section>
-
-    <!-- MAIN ADMIN PANEL (HIDDEN UNTIL LOGIN) -->
-    <section id="adminPanelSection" class="admin-panel hidden">
-      <!-- AREA ROLLS CARD -->
-      <div class="card admin-card">
+  <!-- MAIN LAYOUT -->
+  <main class="admin-main">
+    <!-- AREA ROLLS PANEL -->
+    <section class="card card-wide">
+      <div class="card-header">
         <h2>Area Rolls</h2>
+      </div>
 
-        <label class="field">
-          <span>SW Area</span>
-          <select id="swRegionSelect">
+      <div class="card-body">
+        <div class="form-group">
+          <label for="adminArea">SW Area</label>
+          <select id="adminArea" class="input">
             <option value="SW1">SW1</option>
             <option value="SW2">SW2</option>
             <option value="SW3">SW3</option>
@@ -123,78 +54,86 @@
             <option value="SW18">SW18</option>
             <option value="SW19">SW19</option>
           </select>
-        </label>
+        </div>
 
-        <label class="field">
-          <span>Extra rolls</span>
+        <div class="form-group">
+          <label for="grantCount">Extra rolls</label>
           <input
-            id="extraRollsInput"
             type="number"
-            min="1"
-            step="1"
-            placeholder="e.g. 1, 2, 3…"
+            id="grantCount"
+            class="input"
+            placeholder="e.g. 1, 2, 3..."
+            min="0"
           />
-        </label>
+        </div>
 
-        <div class="admin-actions-row">
-          <button id="btnGrantRollsArea" class="btn btn-primary">
+        <div class="button-row">
+          <button id="grantBtn" class="btn btn-primary">
             Grant to all in area
           </button>
-          <button id="btnGrantRollsSelected" class="btn btn-secondary">
+          <button id="grantSelectedBtn" class="btn btn-secondary">
             Grant to selected players
           </button>
-          <button id="btnUndoLastGrant" class="btn btn-tertiary">
+          <button id="undoGrantBtn" class="btn btn-ghost">
             Undo last grant
           </button>
         </div>
 
-        <p id="grantStatus" class="status"></p>
+        <p class="helper-text">
+          Enter the number of extra rolls to grant. You can grant rolls to the
+          whole area or selected players only.
+        </p>
+      </div>
+    </section>
+
+    <!-- PRIZE SETTINGS PANEL -->
+    <section class="card card-wide">
+      <div class="card-header">
+        <h2>Prize Settings</h2>
       </div>
 
-      <!-- PRIZE SETTINGS CARD -->
-      <div class="card admin-card">
-        <h2>Prize Settings</h2>
-        <p class="card-help">
+      <div class="card-body">
+        <p>
           Set the maximum number of £25 winners allowed in this SW area.
         </p>
 
-        <label class="field">
-          <span>Max £25 winners for this area</span>
+        <div class="form-group">
+          <label for="prizeCount">Max £25 winners for this area</label>
           <input
-            id="prize25Input"
             type="number"
-            min="0"
-            step="1"
+            id="prizeCount"
+            class="input"
             placeholder="e.g. 10"
+            min="0"
           />
-        </label>
+        </div>
 
-        <button id="btnSavePrizes" class="btn btn-primary">
+        <button id="savePrizeBtn" class="btn btn-primary">
           Save prize settings
         </button>
 
-        <p id="prizeStatus" class="status"></p>
+        <p class="helper-text">
+          Adjust this number if you need different prize allocations for each
+          area.
+        </p>
+      </div>
+    </section>
+
+    <!-- PLAYERS TABLE PANEL -->
+    <section class="card card-wide">
+      <div class="card-header">
+        <h2>Players</h2>
+        <!-- UPDATED: dynamic label -->
+        Players in <span id="playersAreaLabel">SW1</span> (0)
       </div>
 
-      <!-- PLAYERS TABLE CARD -->
-      <div class="card admin-card admin-card-wide">
-        <div class="admin-card-header-row">
-          <h2>Players</h2>
-          <button id="btnLoadUsers" class="btn btn-secondary btn-small">
-            Load / refresh area players
-          </button>
-        </div>
-
-        <p id="usersForLabel" class="helper-text">
-          Players in SW1 (0)
-        </p>
-
+      <div class="card-body">
         <div class="table-wrapper">
-          <table class="table players-table">
+          <table class="admin-table">
             <thead>
               <tr>
                 <th>
-                  <input type="checkbox" id="selectAllUsers" />
+                  <input type="checkbox" id="selectAllPlayers" />
                 </th>
                 <th>Email</th>
                 <th>Area</th>
