@@ -1,7 +1,5 @@
 // admin-change-password.js
 
-const BACKEND_BASE_URL =
-  window.SNAKES_BACKEND_URL ||
 const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -45,11 +43,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await response.json().catch(() => ({}));
 
+      // Works with BOTH:
+      //  - hashed version that returns { success: true }
+      //  - Render-env version that returns { error: "Change it in Render..." }
       if (!response.ok || !data.success) {
         const msg =
-          data && data.error
-            ? data.error
-            : "Unable to update password. Please try again.";
+          (data && data.error) ||
+          (data && data.message) ||
+          "Unable to update password. Please try again.";
         showMessage(msg, "error");
         button.disabled = false;
         return;
