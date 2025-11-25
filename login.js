@@ -1,6 +1,11 @@
-const API_BASE = 'https://snakes-ladders-backend.onrender.com';
-const REGISTER_ENDPOINT = `${API_BASE}/api/register`;
-const LOGIN_ENDPOINT = `${API_BASE}/api/login`;
+// -----------------------------
+// CORRECT BACKEND URL
+// -----------------------------
+const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
+
+// Correct endpoints based on backend server.js
+const REGISTER_ENDPOINT = `${BACKEND_BASE_URL}/player/register`;
+const LOGIN_ENDPOINT = `${BACKEND_BASE_URL}/player/login`;
 
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('loginForm');
@@ -11,51 +16,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const submitBtn = document.getElementById('loginSubmitBtn');
   const modeButtons = document.querySelectorAll('.login-mode-btn');
 
-  if (!form || !fullNameInput || !swSelect) {
-    console.error('Login form elements not found – check index.html IDs.');
-    return;
-  }
+  let currentMode = 'login';
 
-  let currentMode = 'login'; // 'login' | 'register'
-
-  // ---------- MODE TOGGLE (login / register) ----------
-
+  // Toggle login/register UI
   function setMode(mode) {
     currentMode = mode;
+    modeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+    submitBtn.textContent = mode === 'login' ? 'Login' : 'Register';
 
-    modeButtons.forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-
-    if (currentMode === 'login') {
-      submitBtn.textContent = 'Login';
-      if (helperEl) {
-        helperEl.textContent =
-          'Login: use the same entaingroup.com / lcroot login and SW area you registered with to continue your game.';
-      }
-    } else {
-      submitBtn.textContent = 'Register';
-      if (helperEl) {
-        helperEl.textContent =
-          'Register: first time playing? Enter your entaingroup.com / lcroot login and SW area to create your game.';
-      }
-    }
-
-    if (errorEl) errorEl.textContent = '';
+    helperEl.textContent =
+      mode === 'login'
+        ? 'Login with the same entaingroup.com / lcroot login you registered with.'
+        : 'Register: first time playing? Create your game here.';
   }
 
-  modeButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mode = btn.dataset.mode || 'login';
-      setMode(mode);
-    });
-  });
+  modeButtons.forEach(btn =>
+    btn.addEventListener('click', () => setMode(btn.dataset.mode))
+  );
 
-  // start in login mode
   setMode('login');
 
-  // ---------- SESSION STORAGE ----------
-
+  // Save session to localStorage
   function saveSession(user, game) {
     const session = {
       userId: user.id,
@@ -66,138 +47,71 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('sl_session', JSON.stringify(session));
   }
 
-  // ---------- HELPERS ----------
-
-  function setSubmitting(isSubmitting) {
-    submitBtn.disabled = isSubmitting;
-    if (isSubmitting) {
-      submitBtn.textContent =
-        currentMode === 'login' ? 'Logging in…' : 'Registering…';
-    } else {
-      submitBtn.textContent =
-        currentMode === 'login' ? 'Login' : 'Register';
-    }
-  }
-
-  async function postJson(url, body) {
+  async function post(url, body) {
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
 
     let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      // ignore if no JSON
-    }
+    try { data = await res.json(); } catch {}
 
     return { res, data };
   }
 
-  // ---------- FORM SUBMIT ----------
-
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (errorEl) errorEl.textContent = '';
+    errorEl.textContent = "";
 
-    const loginId = (fullNameInput.value || '').trim();
+    const username = fullNameInput.value.trim();
     const swCode = swSelect.value;
 
-    if (!loginId) {
-      if (errorEl) {
-        errorEl.textContent =
-          'Please enter your entaingroup.com / lcroot login.';
-      }
-      return;
-    }
+    if (!username) return (errorEl.textContent = "Enter your entaingroup.com login.");
+    if (!swCode) return (errorEl.textContent = "Select your SW area.");
 
-    if (!swCode) {
-      if (errorEl) {
-        errorEl.textContent = 'Please select your SW area.';
-      }
-      return;
-    }
-
-    setSubmitting(true);
+    submitBtn.disabled = true;
+    submitBtn.textContent = currentMode === "login" ? "Logging in…" : "Registering…";
 
     try {
       if (currentMode === 'register') {
-        // ----- REGISTER FLOW -----
-        const { res, data } = await postJson(REGISTER_ENDPOINT, {
-          username: loginId,
+        const { res, data } = await post(REGISTER_ENDPOINT, {
+          username,
           email: null,
-          swCode: swCode,
+          swCode
         });
 
         if (!res.ok) {
-          let msg = `Unable to register (HTTP ${res.status}).`;
-          if (data && data.error) msg = data.error;
-          if (errorEl) errorEl.textContent = msg;
+          errorEl.textContent = data?.error || `Unable to register (${res.status})`;
           return;
         }
 
-        // successful register – FORCE them to now use Player login
-        if (helperEl) {
-          helperEl.textContent =
-            'Registration successful. Now use Player login with the same entaingroup.com / lcroot login and SW area to start or continue your game.';
-        }
-        if (errorEl) errorEl.textContent = '';
-
-        const loginBtn = document.querySelector(
-          '.login-mode-btn[data-mode="login"]'
-        );
-        if (loginBtn) {
-          loginBtn.click();
-        } else {
-          setMode('login');
-        }
-
+        helperEl.textContent = "Registration successful. Now click Player Login.";
+        document.querySelector('.login-mode-btn[data-mode="login"]').click();
         return;
-      } else {
-        // ----- LOGIN FLOW -----
-        const { res, data } = await postJson(LOGIN_ENDPOINT, {
-          username: loginId,
-          email: null,
-          swCode: swCode,
-        });
-
-        if (!res.ok) {
-          let msg = `Unable to login (HTTP ${res.status}).`;
-          if (data && data.error) msg = data.error;
-
-          // enforce the “register first” message
-          if (
-            res.status === 400 ||
-            res.status === 404 ||
-            (typeof msg === 'string' &&
-              /not\s*found|no\s*user|unknown/i.test(msg))
-          ) {
-            msg = 'Incorrect login or you may need to register first.';
-          }
-
-          if (errorEl) errorEl.textContent = msg;
-          return;
-        }
-
-        if (!data || !data.user || !data.game) {
-          if (errorEl) {
-            errorEl.textContent = 'Unexpected response from server.';
-          }
-          return;
-        }
-
-        saveSession(data.user, data.game);
-        window.location.href = 'game.html';
       }
-    } catch (err) {
-      console.error('Login network error', err);
-      if (errorEl) {
-        errorEl.textContent = 'Network error – please try again.';
+
+      // LOGIN FLOW
+      const { res, data } = await post(LOGIN_ENDPOINT, {
+        username,
+        email: null,
+        swCode
+      });
+
+      if (!res.ok) {
+        errorEl.textContent =
+          data?.error || "Incorrect login or you may need to register first.";
+        return;
       }
+
+      saveSession(data.user, data.game);
+      window.location.href = "game.html";
+
+    } catch {
+      errorEl.textContent = "Network error. Try again.";
     } finally {
-      setSubmitting(false);
+      submitBtn.disabled = false;
+      submitBtn.textContent = currentMode === 'login' ? "Login" : "Register";
     }
   });
 });
