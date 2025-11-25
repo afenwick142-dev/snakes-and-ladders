@@ -3,7 +3,7 @@
 // Backend base URL (Render)
 const BACKEND_BASE_URL =
   window.SNAKES_BACKEND_URL ||
-  "https://snakes-ladders-backend.onrender.com";
+const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("admin-login-form");
