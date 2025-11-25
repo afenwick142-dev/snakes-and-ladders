@@ -1,7 +1,8 @@
 // admin-login.js
 
-// Backend base URL (Render)
-const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
+const BACKEND_BASE_URL =
+  window.SNAKES_BACKEND_URL ||
+  "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("admin-login-form");
@@ -9,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const messageEl = document.getElementById("admin-login-message");
 
   if (!form || !button || !messageEl) {
-    console.error("Admin login elements not found in DOM.");
+    console.error("Admin login form elements not found in DOM.");
     return;
   }
 
@@ -19,19 +20,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const usernameInput = document.getElementById("admin-username");
     const passwordInput = document.getElementById("admin-password");
 
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value;
+    const username = (usernameInput.value || "").trim() || "admin";
+    const password = passwordInput.value.trim();
 
-    if (!username || !password) {
-      showMessage("Please enter both username and password.", "error");
+    if (!password) {
+      showMessage("Please enter the admin password.", "error");
       return;
     }
 
     button.disabled = true;
-    showMessage("Logging in...", "info");
+    showMessage("Logging in…", "info");
 
     try {
-      // Backend only *needs* password, but sending username is safe.
       const response = await fetch(`${BACKEND_BASE_URL}/admin/login`, {
         method: "POST",
         headers: {
@@ -44,25 +44,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!response.ok || !data.success) {
         const msg =
-          (data && data.error) ||
-          (data && data.message) ||
-          "Login failed. Please check your details.";
+          (data && (data.error || data.message)) ||
+          "Invalid username or password.";
         showMessage(msg, "error");
         button.disabled = false;
         return;
       }
 
-      // Mark admin as logged in for this browser (simple client-side flag)
-      localStorage.setItem("snakes_admin_logged_in", "true");
-
-      showMessage("Login successful. Redirecting...", "success");
-
-      // Redirect to the main admin portal
+      showMessage("Login successful. Redirecting…", "success");
       setTimeout(() => {
         window.location.href = "admin.html";
-      }, 600);
+      }, 700);
     } catch (err) {
-      console.error("Error logging in:", err);
+      console.error("Admin login error:", err);
       showMessage("Server error while logging in.", "error");
       button.disabled = false;
     }
@@ -71,11 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function showMessage(text, type) {
     messageEl.textContent = text;
     messageEl.classList.remove("error", "success");
-
-    if (type === "error") {
-      messageEl.classList.add("error");
-    } else if (type === "success") {
-      messageEl.classList.add("success");
-    }
+    if (type === "error") messageEl.classList.add("error");
+    if (type === "success") messageEl.classList.add("success");
   }
 });
