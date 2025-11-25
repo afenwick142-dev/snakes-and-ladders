@@ -1,185 +1,180 @@
 // --- Snakes & Ladders Backend ---
-// COMPLETE VERSION — Admin login fixed, change-password now fully functional
-// Compatible with your current DB schema and frontend
+// Complete backend for Anthony Fenwick
+// - Auto-creates all required tables
+// - Player register/login/state/roll
+// - Admin login/password change
+// - Admin roll granting + prize settings
+// - Designed to work with EdgeOne frontend calling this backend.
 
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
+// -----------------------------------------------------------------------------
+// APP SETUP
+// -----------------------------------------------------------------------------
 const app = express();
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-// ----------------------------------------------------------------------------------
-// DATABASE
-// ----------------------------------------------------------------------------------
-
+// -----------------------------------------------------------------------------
+// DATABASE SETUP
+// -----------------------------------------------------------------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl:
+    process.env.DATABASE_SSL === "false"
+      ? false
+      : {
+          rejectUnauthorized: false,
+        },
 });
 
-// Helper for lowercase emails
+// Helper: normalise email + area
 function normaliseEmail(email) {
-  return email.trim().toLowerCase();
+  return (email || "").trim().toLowerCase();
 }
 
-// ----------------------------------------------------------------------------------
-// ADMIN CREDENTIALS INITIALISATION (NEW)
-// ----------------------------------------------------------------------------------
-
-async function ensureAdminRow() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS admin_credentials (
-        id INTEGER PRIMARY KEY,
-        username TEXT NOT NULL,
-        password_hash TEXT NOT NULL
-      );
-    `);
-
-    const row = await pool.query(`SELECT * FROM admin_credentials WHERE id=1`);
-
-    if (row.rows.length === 0) {
-      const defaultUser = "admin";
-      const defaultPass = process.env.ADMIN_PASSWORD || "ChangeMe123!";
-      const hash = await bcrypt.hash(defaultPass, 10);
-
-      await pool.query(
-        `INSERT INTO admin_credentials (id, username, password_hash)
-         VALUES (1, $1, $2)`,
-        [defaultUser, hash]
-      );
-
-      console.log("Admin default credentials created. Username: admin");
-    }
-  } catch (err) {
-    console.error("Failed to ensure admin row:", err);
-  }
+function normaliseArea(area) {
+  return (area || "").trim().toUpperCase();
 }
 
-ensureAdminRow();
+// Board mapping: 1–30 with snakes & ladders.
+// Ladders: 3->22, 5->8, 11->26, 20->29
+// Snakes: 17->4, 19->7, 27->1
+const FINAL_SQUARE = 30;
+const JUMPS = {
+  3: 22,
+  5: 8,
+  11: 26,
+  20: 29,
+  17: 4,
+  19: 7,
+  27: 1,
+};
 
-// ----------------------------------------------------------------------------------
-// ADMIN LOGIN — NOW SECURE + MATCHES YOUR NEW FRONTEND
-// ----------------------------------------------------------------------------------
+function applyBoardJump(position) {
+  return JUMPS[position] || position;
+}
 
-app.post("/admin/login", async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    const row = await pool.query(
-      `SELECT username, password_hash FROM admin_credentials WHERE id=1`
+// Initialise DB: create tables & default admin user if needed
+async function initDatabase() {
+  // players table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS players (
+      email TEXT NOT NULL,
+      area TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      rolls_used INTEGER NOT NULL DEFAULT 0,
+      rolls_granted INTEGER NOT NULL DEFAULT 0,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      reward INTEGER,
+      PRIMARY KEY (email, area)
     );
+  `);
 
-    if (row.rows.length === 0) {
-      return res.status(500).json({ error: "Admin credentials not found." });
-    }
-
-    const admin = row.rows[0];
-
-    // Username check
-    if (username !== admin.username) {
-      return res.status(401).json({ error: "Invalid username or password." });
-    }
-
-    // Password check
-    const valid = await bcrypt.compare(password, admin.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: "Invalid username or password." });
-    }
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Admin login error:", err);
-    return res.status(500).json({ error: "Server error during admin login." });
-  }
-});
-
-// ----------------------------------------------------------------------------------
-// ADMIN CHANGE PASSWORD — NOW WORKING (no Render limitations)
-// ----------------------------------------------------------------------------------
-
-app.post("/admin/change-password", async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    const row = await pool.query(
-      `SELECT password_hash FROM admin_credentials WHERE id=1`
+  // prize_config table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS prize_config (
+      area TEXT PRIMARY KEY,
+      winners INTEGER NOT NULL
     );
+  `);
 
-    if (row.rows.length === 0) {
-      return res.status(500).json({
-        error: "Admin credentials missing.",
-      });
-    }
+  // admin_credentials table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_credentials (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL
+    );
+  `);
 
-    const match = await bcrypt.compare(currentPassword, row.rows[0].password_hash);
-    if (!match) {
-      return res.status(401).json({ error: "Current password incorrect." });
-    }
-
-    const newHash = await bcrypt.hash(newPassword, 10);
-
+  // Ensure a default admin user exists
+  const defaultUsername = "admin";
+  const defaultPassword = process.env.ADMIN_PASSWORD || "Admin123!";
+  const existing = await pool.query(
+    "SELECT id FROM admin_credentials WHERE username = $1",
+    [defaultUsername]
+  );
+  if (existing.rows.length === 0) {
+    const hash = await bcrypt.hash(defaultPassword, 10);
     await pool.query(
-      `UPDATE admin_credentials SET password_hash=$1 WHERE id=1`,
-      [newHash]
+      "INSERT INTO admin_credentials (username, password_hash) VALUES ($1, $2)",
+      [defaultUsername, hash]
     );
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Change password error:", err);
-    return res.status(500).json({ error: "Server error changing password." });
+    console.log(
+      `Initial admin user created with username "${defaultUsername}".`
+    );
   }
+}
+
+initDatabase().catch((err) => {
+  console.error("FATAL: Failed to initialise database", err);
+  process.exit(1);
 });
 
-// ----------------------------------------------------------------------------------
-// PLAYER REGISTER
-// ----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// PLAYER ROUTES
+// -----------------------------------------------------------------------------
 
+// Register new player (or ensure exists)
 app.post("/player/register", async (req, res) => {
   try {
     let { email, area } = req.body;
     email = normaliseEmail(email);
+    area = normaliseArea(area);
 
-    const existing = await pool.query("SELECT * FROM players WHERE email=$1", [
-      email,
-    ]);
-
-    if (existing.rows.length > 0) {
-      return res.json({ success: true });
+    if (!email || !area) {
+      return res.status(400).json({ error: "Email and area are required." });
     }
 
-    await pool.query(
-      `INSERT INTO players (email, area, position, rolls_used, rolls_granted, completed, reward)
-       VALUES ($1, $2, 0, 0, 0, false, null)`,
+    const existing = await pool.query(
+      "SELECT email, area FROM players WHERE email = $1 AND area = $2",
       [email, area]
     );
 
+    if (existing.rows.length === 0) {
+      await pool.query(
+        `
+        INSERT INTO players (email, area, position, rolls_used, rolls_granted, completed, reward)
+        VALUES ($1, $2, 0, 0, 0, false, NULL)
+        `,
+        [email, area]
+      );
+      console.log(`Registered new player ${email} (${area})`);
+    } else {
+      console.log(`Player ${email} (${area}) already registered.`);
+    }
+
     return res.json({ success: true });
   } catch (err) {
-    console.error("Register error:", err);
+    console.error("Player register error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// ----------------------------------------------------------------------------------
-// PLAYER LOGIN
-// ----------------------------------------------------------------------------------
-
+// Player login
 app.post("/player/login", async (req, res) => {
   try {
     let { email, area } = req.body;
     email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    if (!email || !area) {
+      return res.status(400).json({ error: "Email and area are required." });
+    }
 
     const result = await pool.query(
-      "SELECT * FROM players WHERE email=$1 AND area=$2",
+      "SELECT * FROM players WHERE email = $1 AND area = $2",
       [email, area]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Player not found." });
+      return res
+        .status(404)
+        .json({ error: "Player not found. You may need to register first." });
     }
 
     return res.json({ success: true });
@@ -189,189 +184,353 @@ app.post("/player/login", async (req, res) => {
   }
 });
 
-// ----------------------------------------------------------------------------------
-// GET PLAYER STATE
-// ----------------------------------------------------------------------------------
-
+// Get player state
 app.get("/player/state", async (req, res) => {
   try {
     let email = normaliseEmail(req.query.email);
-    const area = req.query.area;
+    let area = normaliseArea(req.query.area);
+
+    if (!email || !area) {
+      return res.status(400).json({ error: "Email and area are required." });
+    }
 
     const result = await pool.query(
-      "SELECT * FROM players WHERE email=$1 AND area=$2",
+      "SELECT * FROM players WHERE email = $1 AND area = $2",
       [email, area]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Player not found." });
+      return res
+        .status(404)
+        .json({ error: "Player not found. You may need to register first." });
     }
 
-    return res.json(result.rows[0]);
+    const row = result.rows[0];
+    const availableRolls = Math.max(
+      0,
+      (row.rolls_granted || 0) - (row.rolls_used || 0)
+    );
+
+    return res.json({
+      email: row.email,
+      area: row.area,
+      position: row.position,
+      rollsUsed: row.rolls_used,
+      rollsGranted: row.rolls_granted,
+      availableRolls,
+      completed: row.completed,
+      reward: row.reward,
+    });
   } catch (err) {
-    console.error("State error:", err);
+    console.error("Get player state error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// ----------------------------------------------------------------------------------
-// PLAYER ROLL — SAME AS YOUR VERSION
-// ----------------------------------------------------------------------------------
-
+// Player rolls dice + move
 app.post("/player/roll", async (req, res) => {
+  const client = await pool.connect();
   try {
-    let email = normaliseEmail(req.body.email);
-    const area = req.body.area;
-    const roll = req.body.roll;
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
 
-    const playerRes = await pool.query(
-      "SELECT * FROM players WHERE email=$1 AND area=$2",
+    if (!email || !area) {
+      client.release();
+      return res.status(400).json({ error: "Email and area are required." });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      "SELECT * FROM players WHERE email = $1 AND area = $2 FOR UPDATE",
       [email, area]
     );
 
-    if (playerRes.rows.length === 0) {
-      return res.status(404).json({ error: "Player not found." });
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res
+        .status(404)
+        .json({ error: "Player not found. You may need to register first." });
     }
 
-    const player = playerRes.rows[0];
+    const player = result.rows[0];
 
-    if (player.rolls_used >= player.rolls_granted + 6) {
-      return res.status(400).json({ error: "No rolls left." });
+    if (player.completed) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(400).json({ error: "Game already completed." });
     }
 
-    let newPos = player.position + roll;
+    const availableRolls =
+      (player.rolls_granted || 0) - (player.rolls_used || 0);
+    if (availableRolls <= 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(400).json({ error: "No rolls remaining." });
+    }
 
-    const snakes = { 17: 4, 19: 7, 27: 1 };
-    const ladders = { 3: 22, 5: 8, 11: 26, 20: 29 };
+    // Roll dice 1–6
+    const dice = Math.floor(Math.random() * 6) + 1;
+    const fromPosition = player.position || 0;
+    let newPosition = fromPosition + dice;
+    if (newPosition > FINAL_SQUARE) {
+      newPosition = FINAL_SQUARE;
+    }
+    newPosition = applyBoardJump(newPosition);
 
-    if (snakes[newPos]) newPos = snakes[newPos];
-    if (ladders[newPos]) newPos = ladders[newPos];
+    let completed = player.completed;
+    let reward = player.reward;
 
-    if (newPos >= 30) newPos = 30;
+    if (!completed && newPosition >= FINAL_SQUARE) {
+      completed = true;
 
-    const completed = newPos === 30;
+      // Determine reward 10 or 25 based on prize_config
+      // Default = 10
+      let finalReward = 10;
+      const areaConfig = await client.query(
+        "SELECT winners FROM prize_config WHERE area = $1",
+        [area]
+      );
+      if (areaConfig.rows.length > 0) {
+        const max25 = areaConfig.rows[0].winners || 0;
+        if (max25 > 0) {
+          const used25 = await client.query(
+            "SELECT COUNT(*) FROM players WHERE area = $1 AND reward = 25",
+            [area]
+          );
+          const usedCount = parseInt(used25.rows[0].count, 10) || 0;
+          if (usedCount < max25) {
+            finalReward = 25;
+          }
+        }
+      }
+      reward = finalReward;
+    }
 
-    await pool.query(
-      `UPDATE players
-       SET position=$1,
-           rolls_used=rolls_used+1,
-           completed=$2
-       WHERE email=$3 AND area=$4`,
-      [newPos, completed, email, area]
+    const updated = await client.query(
+      `
+      UPDATE players
+      SET position = $1,
+          rolls_used = rolls_used + 1,
+          completed = $2,
+          reward = $3
+      WHERE email = $4 AND area = $5
+      RETURNING position, rolls_used, rolls_granted, completed, reward
+      `,
+      [newPosition, completed, reward, email, area]
     );
 
-    return res.json({ position: newPos, completed });
+    await client.query("COMMIT");
+    client.release();
+
+    const row = updated.rows[0];
+    const remaining = Math.max(
+      0,
+      (row.rolls_granted || 0) - (row.rolls_used || 0)
+    );
+
+    return res.json({
+      success: true,
+      dice,
+      fromPosition,
+      toPosition: newPosition,
+      position: row.position,
+      rollsUsed: row.rolls_used,
+      rollsGranted: row.rolls_granted,
+      availableRolls: remaining,
+      completed: row.completed,
+      reward: row.reward,
+    });
   } catch (err) {
-    console.error("Roll error:", err);
+    await client.query("ROLLBACK");
+    client.release();
+    console.error("Player roll error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// ----------------------------------------------------------------------------------
-// LOAD USERS FOR AREA
-// ----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ADMIN ROUTES
+// -----------------------------------------------------------------------------
 
+// List players for an area
 app.get("/players", async (req, res) => {
   try {
-    const area = req.query.area;
+    let area = normaliseArea(req.query.area);
+    if (!area) {
+      return res.status(400).json({ error: "Area is required." });
+    }
+
     const result = await pool.query(
-      "SELECT * FROM players WHERE area=$1 ORDER BY email ASC",
+      `
+      SELECT email, area, position, rolls_used, rolls_granted, completed, reward
+      FROM players
+      WHERE area = $1
+      ORDER BY email ASC
+      `,
       [area]
     );
 
     return res.json(result.rows);
   } catch (err) {
-    console.error("Load users error:", err);
+    console.error("List players error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// ----------------------------------------------------------------------------------
-// GRANT ROLLS
-// ----------------------------------------------------------------------------------
-
+// Grant rolls to area or specific emails
 app.post("/grant-rolls", async (req, res) => {
   try {
-    const { emails, area, count } = req.body;
+    let { area, emails, count } = req.body;
+    area = normaliseArea(area);
+    count = parseInt(count, 10);
 
-    if (emails && emails.length > 0) {
-      for (let raw of emails) {
-        let email = normaliseEmail(raw);
-        await pool.query(
-          `UPDATE players
-           SET rolls_granted = rolls_granted + $1
-           WHERE email=$2 AND area=$3`,
-          [count, email, area]
-        );
-      }
-    } else {
-      await pool.query(
-        `UPDATE players
-         SET rolls_granted = rolls_granted + $1
-         WHERE area=$2`,
-        [count, area]
-      );
+    if (!area || !Number.isInteger(count) || count === 0) {
+      return res
+        .status(400)
+        .json({ error: "Area and non-zero integer count are required." });
     }
 
-    return res.json({ success: true });
+    let query;
+    let params;
+
+    if (Array.isArray(emails) && emails.length > 0) {
+      const normEmails = emails.map(normaliseEmail);
+      query = `
+        UPDATE players
+        SET rolls_granted = GREATEST(0, rolls_granted + $1)
+        WHERE area = $2 AND email = ANY($3::text[])
+      `;
+      params = [count, area, normEmails];
+    } else {
+      query = `
+        UPDATE players
+        SET rolls_granted = GREATEST(0, rolls_granted + $1)
+        WHERE area = $2
+      `;
+      params = [count, area];
+    }
+
+    const result = await pool.query(query, params);
+    return res.json({ success: true, affected: result.rowCount });
   } catch (err) {
     console.error("Grant rolls error:", err);
-    return res.status(500).json({ error: "Error granting rolls." });
+    return res.status(500).json({ error: "Server error." });
   }
 });
 
-// ----------------------------------------------------------------------------------
-// UNDO GRANTS
-// ----------------------------------------------------------------------------------
-
-app.post("/undo-rolls", async (req, res) => {
-  try {
-    const { area, count } = req.body;
-
-    await pool.query(
-      `UPDATE players
-       SET rolls_granted = GREATEST(rolls_granted - $1, 0)
-       WHERE area=$2`,
-      [count, area]
-    );
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Undo roll error:", err);
-    return res.status(500).json({ error: "Error undoing roll grant." });
-  }
-});
-
-// ----------------------------------------------------------------------------------
-// PRIZE CONFIG
-// ----------------------------------------------------------------------------------
-
+// Save prize settings for an area
 app.post("/area/prize", async (req, res) => {
   try {
-    const { area, count } = req.body;
+    let { area, count } = req.body;
+    area = normaliseArea(area);
+    count = parseInt(count, 10);
+
+    if (!area || !Number.isInteger(count) || count < 0) {
+      return res.status(400).json({
+        error: "Area and a non-negative whole number of winners are required.",
+      });
+    }
 
     await pool.query(
-      `INSERT INTO prize_config (area, winners)
-       VALUES ($1, $2)
-       ON CONFLICT (area)
-       DO UPDATE SET winners = EXCLUDED.winners`,
+      `
+      INSERT INTO prize_config (area, winners)
+      VALUES ($1, $2)
+      ON CONFLICT (area)
+      DO UPDATE SET winners = EXCLUDED.winners
+      `,
       [area, count]
     );
 
     return res.json({ success: true });
   } catch (err) {
-    console.error("Prize save error:", err);
+    console.error("Save prize config error:", err);
     return res.status(500).json({ error: "Failed to save prize config." });
   }
 });
 
-// ----------------------------------------------------------------------------------
+// Admin login
+app.post("/admin/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = (username || "admin").trim();
 
+    if (!password) {
+      return res.status(400).json({ error: "Password is required." });
+    }
+
+    const result = await pool.query(
+      "SELECT * FROM admin_credentials WHERE username = $1",
+      [user]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid username or password." });
+    }
+
+    const row = result.rows[0];
+    const ok = await bcrypt.compare(password, row.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: "Invalid username or password." });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Admin login error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+// Change admin password
+app.post("/admin/change-password", async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const username = "admin";
+
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: "Current and new passwords are required." });
+    }
+
+    const result = await pool.query(
+      "SELECT * FROM admin_credentials WHERE username = $1",
+      [username]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(500).json({ error: "Admin user not initialised." });
+    }
+
+    const row = result.rows[0];
+    const ok = await bcrypt.compare(currentPassword, row.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      "UPDATE admin_credentials SET password_hash = $1 WHERE username = $2",
+      [newHash, username]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Change admin password error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// HEALTH CHECK
+// -----------------------------------------------------------------------------
 app.get("/", (req, res) => {
   res.send("Snakes & Ladders backend running.");
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () =>
-  console.log(`Backend running on port ${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
