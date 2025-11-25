@@ -3,119 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <title>Admin Login – Snakes &amp; Ladders</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
-    .admin-login-container {
-      background: #ffffff;
-      padding: 24px 28px;
-      border-radius: 12px;
-      max-width: 380px;
-      width: 100%;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-    }
-    .admin-login-title {
-      margin-top: 0;
-      margin-bottom: 16px;
-      text-align: center;
-      font-size: 1.3rem;
-    }
-    .admin-login-form {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .admin-login-form label {
-      font-size: 0.9rem;
-      margin-bottom: 4px;
-    }
-    .admin-login-form input {
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 0.95rem;
-    }
-    .admin-login-button {
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      background: #6c2bb4;
-      color: #ffffff;
-    }
-    .admin-login-message {
-      margin-top: 8px;
-      font-size: 0.9rem;
-      text-align: center;
-      min-height: 18px;
-    }
-    .admin-login-message.error {
-      color: #d32f2f;
-    }
-    .admin-login-message.success {
-      color: #2e7d32;
-    }
-    .admin-login-links {
-      margin-top: 16px;
-      font-size: 0.85rem;
-      text-align: center;
-    }
-    .admin-login-links a {
-      color: #6c2bb4;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .admin-login-links a:hover {
-      text-decoration: underline;
-    }
-  </style>
 </head>
-<body>
-  <div class="admin-login-container">
-    <h1 class="admin-login-title">Admin Login</h1>
-
-    <form id="admin-login-form" class="admin-login-form">
-      <div>
-        <label for="admin-username">Username</label>
-        <input
-          id="admin-username"
-          type="text"
-          autocomplete="username"
-          value="admin"
-        />
-        <small style="font-size:0.8rem;color:#555;">Username is fixed as <strong>admin</strong></small>
+<body class="page page-admin">
+  <header class="top-bar">
+    <div class="top-left">
+      <img src="sw-logo.png" alt="SW Logo" class="logo-img" />
+      <div class="brand">
+        <div class="brand-title">Snakes &amp; Ladders Admin</div>
+        <div class="brand-sub">SW Multichannel Challenge – Control Panel</div>
       </div>
-      <div>
-        <label for="admin-password">Password</label>
-        <input
-          id="admin-password"
-          type="password"
-          required
-          autocomplete="current-password"
-        />
-      </div>
-      <button type="submit" id="admin-login-button" class="admin-login-button">
-        Login
-      </button>
-      <div id="admin-login-message" class="admin-login-message"></div>
-    </form>
-
-    <div class="admin-login-links">
-      <a href="admin-change-password.html">Change admin password</a>
     </div>
-  </div>
+  </header>
+
+  <main class="main-wrapper main-login-layout">
+    <section class="card card-login">
+      <h1>Admin Login</h1>
+      <p>
+        Sign in with the admin password to manage rolls, prizes, and players.
+      </p>
+
+      <form id="admin-login-form" class="form">
+        <div class="form-group">
+          <label for="admin-username">Username</label>
+          <input
+            id="admin-username"
+            type="text"
+            class="input"
+            value="admin"
+            disabled
+          />
+          <p class="helper-text">Username is fixed as <strong>admin</strong></p>
+        </div>
+
+        <div class="form-group">
+          <label for="admin-password">Password</label>
+          <input
+            id="admin-password"
+            type="password"
+            class="input"
+            placeholder="Enter admin password"
+          />
+        </div>
+
+        <button id="admin-login-button" type="submit" class="btn btn-primary">
+          Login
+        </button>
+      </form>
+
+      <p id="admin-login-message" class="status"></p>
+
+      <p class="helper-text" style="margin-top:16px;">
+        <a href="admin-change-password.html">Change admin password</a>
+      </p>
+    </section>
+  </main>
 
   <script src="admin-login.js"></script>
 </body>
