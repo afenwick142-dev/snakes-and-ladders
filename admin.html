@@ -23,113 +23,116 @@
   </header>
 
   <!-- MAIN LAYOUT -->
-  <main class="admin-main">
-    <!-- AREA ROLLS PANEL -->
-    <section class="card card-wide">
-      <div class="card-header">
-        <h2>Area Rolls</h2>
-      </div>
-
-      <div class="card-body">
-        <div class="form-group">
-          <label for="adminArea">SW Area</label>
-          <select id="adminArea" class="input">
-            <option value="SW1">SW1</option>
-            <option value="SW2">SW2</option>
-            <option value="SW3">SW3</option>
-            <option value="SW4">SW4</option>
-            <option value="SW5">SW5</option>
-            <option value="SW6">SW6</option>
-            <option value="SW7">SW7</option>
-            <option value="SW8">SW8</option>
-            <option value="SW9">SW9</option>
-            <option value="SW10">SW10</option>
-            <option value="SW11">SW11</option>
-            <option value="SW12">SW12</option>
-            <option value="SW13">SW13</option>
-            <option value="SW14">SW14</option>
-            <option value="SW15">SW15</option>
-            <option value="SW16">SW16</option>
-            <option value="SW17">SW17</option>
-            <option value="SW18">SW18</option>
-            <option value="SW19">SW19</option>
-          </select>
+  <main class="main-wrapper main-admin-layout">
+    <!-- TOP ROW: AREA ROLLS + PRIZE SETTINGS SIDE BY SIDE -->
+    <div class="admin-controls-grid">
+      <!-- AREA ROLLS PANEL -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Area Rolls</h2>
         </div>
 
-        <div class="form-group">
-          <label for="grantCount">Extra rolls</label>
-          <input
-            type="number"
-            id="grantCount"
-            class="input"
-            placeholder="e.g. 1, 2, 3..."
-            min="0"
-          />
+        <div class="card-body">
+          <div class="form-group">
+            <label for="adminArea">SW Area</label>
+            <select id="adminArea" class="input">
+              <option value="SW1">SW1</option>
+              <option value="SW2">SW2</option>
+              <option value="SW3">SW3</option>
+              <option value="SW4">SW4</option>
+              <option value="SW5">SW5</option>
+              <option value="SW6">SW6</option>
+              <option value="SW7">SW7</option>
+              <option value="SW8">SW8</option>
+              <option value="SW9">SW9</option>
+              <option value="SW10">SW10</option>
+              <option value="SW11">SW11</option>
+              <option value="SW12">SW12</option>
+              <option value="SW13">SW13</option>
+              <option value="SW14">SW14</option>
+              <option value="SW15">SW15</option>
+              <option value="SW16">SW16</option>
+              <option value="SW17">SW17</option>
+              <option value="SW18">SW18</option>
+              <option value="SW19">SW19</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="grantCount">Extra rolls</label>
+            <input
+              type="number"
+              id="grantCount"
+              class="input"
+              placeholder="e.g. 1, 2, 3..."
+              min="0"
+            />
+          </div>
+
+          <div class="button-row">
+            <button id="grantBtn" class="btn btn-primary">
+              Grant to all in area
+            </button>
+            <button id="grantSelectedBtn" class="btn btn-secondary">
+              Grant to selected players
+            </button>
+            <button id="undoGrantBtn" class="btn btn-ghost">
+              Undo last grant
+            </button>
+          </div>
+
+          <p class="helper-text">
+            Enter the number of extra rolls to grant. You can grant rolls to the
+            whole area or selected players only.
+          </p>
+        </div>
+      </section>
+
+      <!-- PRIZE SETTINGS PANEL -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Prize Settings</h2>
         </div>
 
-        <div class="button-row">
-          <button id="grantBtn" class="btn btn-primary">
-            Grant to all in area
+        <div class="card-body">
+          <p>
+            Set the maximum number of £25 winners allowed in this SW area.
+          </p>
+
+          <div class="form-group">
+            <label for="prizeCount">Max £25 winners for this area</label>
+            <input
+              type="number"
+              id="prizeCount"
+              class="input"
+              placeholder="e.g. 10"
+              min="0"
+            />
+          </div>
+
+          <button id="savePrizeBtn" class="btn btn-primary">
+            Save prize settings
           </button>
-          <button id="grantSelectedBtn" class="btn btn-secondary">
-            Grant to selected players
-          </button>
-          <button id="undoGrantBtn" class="btn btn-ghost">
-            Undo last grant
-          </button>
+
+          <p class="helper-text">
+            Adjust this number if you need different prize allocations for each
+            area.
+          </p>
         </div>
+      </section>
+    </div>
 
-        <p class="helper-text">
-          Enter the number of extra rolls to grant. You can grant rolls to the
-          whole area or selected players only.
-        </p>
-      </div>
-    </section>
-
-    <!-- PRIZE SETTINGS PANEL -->
-    <section class="card card-wide">
-      <div class="card-header">
-        <h2>Prize Settings</h2>
-      </div>
-
-      <div class="card-body">
-        <p>
-          Set the maximum number of £25 winners allowed in this SW area.
-        </p>
-
-        <div class="form-group">
-          <label for="prizeCount">Max £25 winners for this area</label>
-          <input
-            type="number"
-            id="prizeCount"
-            class="input"
-            placeholder="e.g. 10"
-            min="0"
-          />
-        </div>
-
-        <button id="savePrizeBtn" class="btn btn-primary">
-          Save prize settings
-        </button>
-
-        <p class="helper-text">
-          Adjust this number if you need different prize allocations for each
-          area.
-        </p>
-      </div>
-    </section>
-
-    <!-- PLAYERS TABLE PANEL -->
-    <section class="card card-wide">
+    <!-- BOTTOM: FULL-WIDTH PLAYERS PANEL -->
+    <section class="card admin-users-card">
       <div class="card-header">
         <h2>Players</h2>
-        <!-- UPDATED: dynamic label -->
+        <!-- Dynamic label -->
         Players in <span id="playersAreaLabel">SW1</span> (0)
       </div>
 
       <div class="card-body">
         <div class="table-wrapper">
-          <table class="admin-table">
+          <table class="players-table">
             <thead>
               <tr>
                 <th>
