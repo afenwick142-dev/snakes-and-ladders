@@ -1,0 +1,629 @@
+/* BASIC RESET */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #f5f7ff;
+}
+
+/* BACKGROUND / THEME */
+body.page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #312e81, #020617 58%);
+}
+
+.page-login,
+.page-game,
+.page-admin {
+  display: flex;
+  flex-direction: column;
+}
+
+/* TOP BAR */
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 32px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+.top-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-img {
+  width: 64px;
+  height: 64px;
+  max-width: 140px;
+  max-height: 140px;
+  object-fit: contain;
+  border-radius: 16px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.brand-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.brand-sub {
+  font-size: 0.8rem;
+  color: #cfd3ff;
+}
+
+.pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.pill-user {
+  background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.9));
+}
+
+/* MAIN WRAPPER */
+.main-wrapper {
+  max-width: 1200px;
+  margin: 24px auto 48px;
+  padding: 0 16px;
+}
+
+.main-login-layout,
+.main-game-layout,
+.main-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+/* CARDS */
+.card {
+  background: radial-gradient(circle at top, rgba(55, 65, 81, 0.9), rgba(17, 24, 39, 0.95));
+  border-radius: 24px;
+  padding: 24px 28px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.card h1,
+.card h2,
+.card h3 {
+  margin-top: 0;
+}
+
+.card-login {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.card-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* BUTTONS */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  color: #fff;
+  box-shadow: 0 14px 32px rgba(236, 72, 153, 0.55);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+}
+
+.btn-secondary:hover {
+  background: rgba(31, 41, 55, 0.95);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.btn-danger {
+  background: #b91c1c;
+  color: #fee2e2;
+}
+
+/* FORMS / TEXT */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  color: #f9fafb;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid #a855f7;
+}
+
+.error-text {
+  margin-top: 8px;
+  color: #fecaca;
+  font-size: 0.85rem;
+}
+
+.helper-text {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: #e5e7eb;
+}
+
+/* LOGIN MODE TOGGLE */
+.toggle-group {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
+  margin-bottom: 12px;
+}
+
+.toggle-btn {
+  border-radius: 999px;
+  border: none;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #e5e7eb;
+  background: transparent;
+}
+
+.toggle-btn.active {
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  color: #fff;
+}
+
+/* PAGE-SPECIFIC LAYOUTS */
+
+/* Login page */
+.page-login .main-login-layout {
+  grid-template-columns: minmax(0, 1.2fr);
+  justify-content: center;
+}
+
+/* Game page – board + side panel */
+.page-game .main-game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.1fr);
+  gap: 20px;
+}
+
+/* Admin page – single column (login then wide panel) */
+.page-admin .main-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* Centre and widen the admin panel */
+#adminPanelSection {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* GAME BOARD */
+.board-container {
+  margin-top: 16px;
+  position: relative;
+  width: 100%;
+  padding-top: calc(5 / 6 * 100%);
+  border-radius: 24px;
+  overflow: hidden;
+  background-image: url("board.png");
+  background-size: cover;
+  background-position: center;
+  border: 2px solid rgba(148, 163, 184, 0.7);
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.7);
+}
+
+.board-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+}
+
+/* BOARD CELLS (INVISIBLE CLICK GRID) */
+.board-cell {
+  position: relative;
+}
+
+/* COUNTER TOKEN */
+.counter {
+  position: absolute;
+  width: 10%;
+  height: 10%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ecfeff, #06b6d4);
+  box-shadow:
+    0 0 0 4px rgba(15, 23, 42, 0.95),
+    0 10px 25px rgba(6, 182, 212, 0.7),
+    inset 0 2px 4px rgba(255, 255, 255, 0.5),
+    inset 0 -3px 8px rgba(15, 23, 42, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* text removed – keep disc only */
+  font-size: 0;
+  color: transparent;
+  text-align: center;
+  line-height: 0;
+  text-shadow: none;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.counter.hidden {
+  display: none;
+}
+
+/* COUNTER THEMES */
+.counter.counter-theme-1 {
+  background: radial-gradient(circle, #ffedd5, #f97316);
+}
+.counter.counter-theme-2 {
+  background: radial-gradient(circle, #dcfce7, #22c55e);
+}
+.counter.counter-theme-3 {
+  background: radial-gradient(circle, #e0f2fe, #38bdf8);
+}
+.counter.counter-theme-4 {
+  background: radial-gradient(circle, #e0e7ff, #6366f1);
+}
+.counter.counter-theme-5 {
+  background: radial-gradient(circle, #ffe4e6, #e11d48);
+}
+.counter.counter-theme-6 {
+  background: radial-gradient(circle, #fef9c3, #facc15);
+}
+
+/* DICE */
+.dice-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dice {
+  font-size: 6rem;       /* doubled size */
+  min-width: 96px;
+  text-align: center;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
+}
+
+.dice.spin {
+  animation: spinDice 0.5s ease-out;
+}
+
+@keyframes spinDice {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.2);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+/* COUNTER CHOICES */
+.counter-choices {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.counter-choice {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.85);
+}
+
+.counter-choice-1 {
+  background: #f97316;
+}
+.counter-choice-2 {
+  background: #22c55e;
+}
+.counter-choice-3 {
+  background: #38bdf8;
+}
+.counter-choice-4 {
+  background: #6366f1;
+}
+.counter-choice-5 {
+  background: #e11d48;
+}
+.counter-choice-6 {
+  background: #facc15;
+}
+
+.counter-choice.active {
+  box-shadow: 0 0 0 3px #e5e7eb;
+}
+
+/* STATUS PANEL */
+.status-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 4px;
+}
+
+.status-label {
+  color: #9ca3af;
+}
+
+/* HIDDEN UTILITY */
+.hidden {
+  display: none;
+}
+
+/* CONFETTI */
+.confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  overflow: hidden;
+  z-index: 50;
+  transition: opacity 0.15s ease-out;
+}
+
+.confetti.show {
+  opacity: 1;
+}
+
+.confetti-piece {
+  position: absolute;
+  width: 10px;
+  height: 18px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fall 2.2s linear forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -10%, 0) rotateZ(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 120vh, 0) rotateZ(360deg);
+    opacity: 0;
+  }
+}
+
+/* WIN OVERLAY */
+.win-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
+.win-overlay.hidden {
+  display: none;
+}
+
+.win-card {
+  max-width: 420px;
+  padding: 28px 32px;
+  border-radius: 24px;
+  text-align: center;
+  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.95), rgba(15, 23, 42, 0.98));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+}
+
+.win-card h2 {
+  margin-bottom: 12px;
+}
+
+.win-card p {
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+}
+
+/* ADMIN SECTION */
+.admin-panel {
+  /* base card styling from .card */
+}
+
+.admin-controls-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.admin-status {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #e5e7eb;
+}
+
+.admin-users-card {
+  margin-top: 16px;
+}
+
+/* new compact card for prize settings */
+.admin-prizes-card {
+  margin-top: 16px;
+}
+
+.prize-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.prize-grid label {
+  flex: 1 1 160px;
+}
+
+/* admin users table */
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-users-table th,
+.admin-users-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  text-align: left;
+}
+
+.admin-users-table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+}
+
+.admin-users-table tbody tr:hover {
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.input-small {
+  width: 64px;
+}
+
+.per-user-rolls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .main-game-layout,
+  .main-admin-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-controls-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-login {
+    margin-bottom: 16px;
+  }
+}
+/* Ensure admin table is readable and spaced correctly */
+.players-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 8px;   /* vertical spacing between rows */
+    margin-top: 10px;
+}
+
+.players-table th,
+.players-table td {
+    padding: 12px 10px;      /* adds spacing inside cells */
+    text-align: left;
+    color: #fff;
+    font-size: 14px;
+}
+
+.players-table th {
+    font-weight: 700;
+}
+
+.players-table tr {
+    background: rgba(255, 255, 255, 0.05); /* subtle contrasting row background */
+    border-radius: 10px;
+}
+
+.players-table tr td:first-child,
+.players-table tr th:first-child {
+    padding-left: 16px;
+}
+
+.players-table tr td:last-child,
+.players-table tr th:last-child {
+    padding-right: 16px;
+}
+
+/* Make the card have breathing space so content doesn't collide */
+.card.admin-card {
+    padding: 25px 30px;
+    margin-bottom: 40px;
+    border-radius: 20px;
+}
+
+/* Ensure Actions buttons align cleanly */
+.btn-small {
+    margin-right: 6px;
+}

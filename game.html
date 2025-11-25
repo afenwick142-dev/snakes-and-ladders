@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Snakes &amp; Ladders – Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Load CSS from root -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page page-game">
+
+  <header class="top-bar">
+    <div class="top-left">
+      <!-- Logo properly styled -->
+      <img src="sw-logo.png" alt="SW Logo" class="logo-img" />
+      <div class="brand">
+        <div class="brand-title">Snakes &amp; Ladders</div>
+        <div class="brand-sub">SW Multichannel Challenge</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span id="userInfo" class="pill pill-user"></span>
+      <button id="btnLogout" class="btn btn-secondary btn-small">Logout</button>
+    </div>
+  </header>
+
+  <main class="main-wrapper main-game-layout">
+    <!-- LEFT: Board -->
+    <section class="card card-board">
+      <h2 class="card-title">Game Board</h2>
+      <p class="subtitle">
+        Reach square 30 in six rolls or less. Watch out for the snakes, aim for the ladders.
+      </p>
+
+      <div class="board-container">
+        <div id="boardGrid" class="board-grid"></div>
+        <!-- Main playing counter -->
+        <div id="counter" class="counter hidden"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Panels -->
+    <aside class="side-panel">
+      <section class="card">
+        <h3>Dice</h3>
+        <div class="dice-area">
+          <div id="dice" class="dice">–</div>
+          <button id="btnRoll" class="btn btn-primary">Roll Dice</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Game Progress</h3>
+        <p class="helper-text">
+          You have <strong>up to six rolls</strong> to reach square 30.
+          Admins may grant extra rolls for your SW area.
+        </p>
+        <ul class="progress-list">
+          <li><span>Current square:</span> <span id="statusPosition">0</span></li>
+          <li><span>Rolls used:</span> <span id="statusRollsUsed">0</span></li>
+          <li><span>Rolls granted:</span> <span id="statusRollsGranted">0</span></li>
+          <li><span>Potential reward:</span> <span id="statusReward">—</span></li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>Counter Style</h3>
+        <p>Pick your playing piece.</p>
+        <div class="counter-choices">
+          <button class="counter-choice counter-choice-1" data-theme="1" data-counter-theme-index="0">1</button>
+          <button class="counter-choice counter-choice-2" data-theme="2" data-counter-theme-index="1">2</button>
+          <button class="counter-choice counter-choice-3" data-theme="3" data-counter-theme-index="2">3</button>
+          <button class="counter-choice counter-choice-4" data-theme="4" data-counter-theme-index="3">4</button>
+          <button class="counter-choice counter-choice-5" data-theme="5" data-counter-theme-index="4">5</button>
+          <button class="counter-choice counter-choice-6" data-theme="6" data-counter-theme-index="5">6</button>
+        </div>
+      </section>
+
+      <section class="card status-card">
+        <h3>Status</h3>
+        <p id="statusPositionText">Position: 0 / 30</p>
+        <p id="statusRollsUsedText">Rolls used: 0</p>
+        <p id="statusRollsGrantedText">Rolls granted: 0</p>
+        <p id="statusRewardText">Reward: —</p>
+        <p id="statusCaption" class="caption"></p>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Confetti overlay -->
+  <div id="confetti" class="confetti"></div>
+
+  <!-- Winner overlay -->
+  <div id="winOverlay" class="win-overlay hidden">
+    <div class="win-card">
+      <h2>Congratulations!</h2>
+      <p id="winMessage"></p>
+      <button id="winCloseBtn" class="btn btn-secondary">Close</button>
+    </div>
+  </div>
+
+  <!-- Load JS once, at the end -->
+  <script src="game.js"></script>
+</body>
+</html>

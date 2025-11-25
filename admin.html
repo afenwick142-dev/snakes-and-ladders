@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Snakes &amp; Ladders – Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="page page-admin">
+  <!-- TOP BAR WITH LOGO + BACK LINK -->
+  <header class="top-bar">
+    <div class="top-left">
+      <img src="sw-logo.png" alt="SW Logo" class="logo-img" />
+      <div class="brand-text">
+        <div class="brand-title">Snakes &amp; Ladders Admin</div>
+        <div class="brand-sub">SW Multichannel Challenge – Control Panel</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <a href="game.html" class="pill pill-user">Back to game</a>
+    </div>
+  </header>
+
+  <main class="main-wrapper main-admin-layout">
+    <!-- LOGIN CARD -->
+    <section id="adminLoginSection" class="card admin-login-card">
+      <h1>Admin Login</h1>
+      <p>
+        Enter the admin password to access area rolls, prize settings and player management.
+      </p>
+
+      <label class="field">
+        <span>Admin password</span>
+        <input
+          id="adminPasswordInput"
+          type="password"
+          autocomplete="off"
+          placeholder="Enter admin password"
+        />
+      </label>
+
+      <button id="btnAdminLogin" type="button" class="btn btn-primary">
+        Login
+      </button>
+
+      <p id="adminLoginStatus" class="status error-text"></p>
+
+      <button
+        id="btnShowChangePassword"
+        type="button"
+        class="btn btn-secondary btn-small"
+        style="margin-top: 10px;"
+      >
+        Change admin password
+      </button>
+      <p class="helper-text">
+        Use this if you need to update the admin password before logging in.
+      </p>
+    </section>
+
+    <!-- CHANGE PASSWORD CARD -->
+    <section
+      id="adminChangePasswordSection"
+      class="card admin-password-card hidden"
+    >
+      <h2>Change Admin Password</h2>
+      <p class="card-help">
+        Update the admin password stored in the backend. This replaces the existing password for all future logins.
+      </p>
+
+      <label class="field">
+        <span>New password</span>
+        <input
+          id="adminNewPasswordInput"
+          type="password"
+          autocomplete="off"
+          placeholder="Enter new admin password"
+        />
+      </label>
+
+      <button id="btnChangePassword" type="button" class="btn btn-primary">
+        Save password
+      </button>
+
+      <p id="adminChangePasswordStatus" class="status"></p>
+
+      <button
+        id="btnCancelPasswordChange"
+        type="button"
+        class="btn btn-secondary btn-small"
+        style="margin-top: 12px;"
+      >
+        Back to login
+      </button>
+    </section>
+
+    <!-- MAIN ADMIN PANEL (HIDDEN UNTIL LOGIN) -->
+    <section id="adminPanelSection" class="admin-panel hidden">
+      <!-- AREA ROLLS CARD -->
+      <div class="card admin-card">
+        <h2>Area Rolls</h2>
+
+        <label class="field">
+          <span>SW area</span>
+          <select id="swRegionSelect">
+            <option value="SW1">SW1</option>
+            <option value="SW2">SW2</option>
+            <option value="SW3">SW3</option>
+            <option value="SW4">SW4</option>
+            <option value="SW5">SW5</option>
+            <option value="SW6">SW6</option>
+            <option value="SW7">SW7</option>
+            <option value="SW8">SW8</option>
+            <option value="SW9">SW9</option>
+            <option value="SW10">SW10</option>
+            <option value="SW11">SW11</option>
+            <option value="SW12">SW12</option>
+            <option value="SW13">SW13</option>
+            <option value="SW14">SW14</option>
+            <option value="SW15">SW15</option>
+            <option value="SW16">SW16</option>
+            <option value="SW17">SW17</option>
+            <option value="SW18">SW18</option>
+            <option value="SW19">SW19</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Extra rolls to grant</span>
+          <input
+            id="extraRollsInput"
+            type="number"
+            min="1"
+            placeholder="e.g. 10"
+          />
+        </label>
+
+        <div class="button-row">
+          <button id="btnGrantRollsArea" class="btn btn-primary">
+            Grant rolls to area / selected
+          </button>
+          <button id="btnUndoLastGrant" class="btn btn-secondary">
+            Undo last grant
+          </button>
+          <button id="btnLoadUsers" class="btn btn-outline">
+            Load users for area
+          </button>
+        </div>
+
+        <p id="grantStatus" class="status"></p>
+      </div>
+
+      <!-- PRIZE SETTINGS CARD -->
+      <div class="card admin-card">
+        <h2>Area Prize Settings</h2>
+        <p class="card-help">
+          Decide how many players in this SW area will receive the £25 Champions Points prize.
+          All other completed games will automatically receive the default £10 prize.
+        </p>
+
+        <label class="field">
+          <span>Number of £25 winners for this area</span>
+          <input
+            id="prize25Input"
+            type="number"
+            min="0"
+            placeholder="e.g. 5"
+          />
+        </label>
+
+        <button id="btnSavePrizes" class="btn btn-primary">
+          Save prize settings for this area
+        </button>
+
+        <p id="prizeStatus" class="status"></p>
+      </div>
+
+      <!-- PLAYERS TABLE CARD -->
+      <div class="card admin-card">
+        <h2 id="usersForLabel">Players</h2>
+
+        <table class="players-table">
+          <thead>
+            <tr>
+              <th>
+                <input type="checkbox" id="selectAllUsers" />
+              </th>
+              <th>Name</th>
+              <th>SW</th>
+              <th>Pos</th>
+              <th>Used</th>
+              <th>Granted</th>
+              <th>Completed</th>
+              <th>Reward</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="playersTableBody"></tbody>
+        </table>
+
+        <p id="usersStatus" class="status"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>
