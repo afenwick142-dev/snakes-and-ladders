@@ -1,6 +1,6 @@
 // admin.js
 
-const API_BASE = "https://snakes-ladders-backend.onrender.com";
+const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
   // Sections
@@ -708,3 +708,4 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial label
   updateUsersLabel(0);
 });
+
