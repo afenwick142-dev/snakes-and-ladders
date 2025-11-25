@@ -1,4 +1,4 @@
-const API_BASE = "https://snakes-ladders-backend.onrender.com";
+const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
 
 // ---------- DOM REFERENCES ----------
 const boardGrid = document.getElementById("boardGrid");
@@ -494,3 +494,4 @@ function initCounterThemes() {
 buildBoard();
 initCounterThemes();
 loadGameFromSession();
+
