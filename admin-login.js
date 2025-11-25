@@ -1,8 +1,6 @@
 // admin-login.js
 
 // Backend base URL (Render)
-const BACKEND_BASE_URL =
-  window.SNAKES_BACKEND_URL ||
 const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -33,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     showMessage("Logging in...", "info");
 
     try {
+      // Backend only *needs* password, but sending username is safe.
       const response = await fetch(`${BACKEND_BASE_URL}/admin/login`, {
         method: "POST",
         headers: {
@@ -45,21 +44,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!response.ok || !data.success) {
         const msg =
-          data && data.error
-            ? data.error
-            : "Login failed. Please check your details.";
+          (data && data.error) ||
+          (data && data.message) ||
+          "Login failed. Please check your details.";
         showMessage(msg, "error");
         button.disabled = false;
         return;
       }
 
-      // Mark admin as logged in on the client side.
+      // Mark admin as logged in for this browser (simple client-side flag)
       localStorage.setItem("snakes_admin_logged_in", "true");
 
       showMessage("Login successful. Redirecting...", "success");
 
-      // Redirect to admin panel
-      window.location.href = "admin.html";
+      // Redirect to the main admin portal
+      setTimeout(() => {
+        window.location.href = "admin.html";
+      }, 600);
     } catch (err) {
       console.error("Error logging in:", err);
       showMessage("Server error while logging in.", "error");
