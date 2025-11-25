@@ -1,6 +1,8 @@
 // admin-change-password.js
 
-const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
+const BACKEND_BASE_URL =
+  window.SNAKES_BACKEND_URL ||
+  "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("admin-change-form");
@@ -18,8 +20,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentPasswordInput = document.getElementById("current-password");
     const newPasswordInput = document.getElementById("new-password");
 
-    const currentPassword = currentPasswordInput.value;
-    const newPassword = newPasswordInput.value;
+    const currentPassword = currentPasswordInput.value.trim();
+    const newPassword = newPasswordInput.value.trim();
 
     if (!currentPassword || !newPassword) {
       showMessage("Please fill in both fields.", "error");
@@ -43,14 +45,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await response.json().catch(() => ({}));
 
-      // Works with BOTH:
-      //  - hashed version that returns { success: true }
-      //  - Render-env version that returns { error: "Change it in Render..." }
       if (!response.ok || !data.success) {
         const msg =
-          (data && data.error) ||
-          (data && data.message) ||
-          "Unable to update password. Please try again.";
+          (data && (data.error || data.message)) ||
+          "Unable to update password. Please check the current password.";
         showMessage(msg, "error");
         button.disabled = false;
         return;
@@ -70,7 +68,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function showMessage(text, type) {
     messageEl.textContent = text;
     messageEl.classList.remove("error", "success");
-
     if (type === "error") {
       messageEl.classList.add("error");
     } else if (type === "success") {
