@@ -101,7 +101,7 @@
         <h2>Area Rolls</h2>
 
         <label class="field">
-          <span>SW area</span>
+          <span>SW Area</span>
           <select id="swRegionSelect">
             <option value="SW1">SW1</option>
             <option value="SW2">SW2</option>
@@ -126,24 +126,25 @@
         </label>
 
         <label class="field">
-          <span>Extra rolls to grant</span>
+          <span>Extra rolls</span>
           <input
             id="extraRollsInput"
             type="number"
             min="1"
-            placeholder="e.g. 10"
+            step="1"
+            placeholder="e.g. 1, 2, 3…"
           />
         </label>
 
-        <div class="button-row">
+        <div class="admin-actions-row">
           <button id="btnGrantRollsArea" class="btn btn-primary">
-            Grant rolls to area / selected
+            Grant to all in area
           </button>
-          <button id="btnUndoLastGrant" class="btn btn-secondary">
+          <button id="btnGrantRollsSelected" class="btn btn-secondary">
+            Grant to selected players
+          </button>
+          <button id="btnUndoLastGrant" class="btn btn-tertiary">
             Undo last grant
-          </button>
-          <button id="btnLoadUsers" class="btn btn-outline">
-            Load users for area
           </button>
         </div>
 
@@ -152,51 +153,62 @@
 
       <!-- PRIZE SETTINGS CARD -->
       <div class="card admin-card">
-        <h2>Area Prize Settings</h2>
+        <h2>Prize Settings</h2>
         <p class="card-help">
-          Decide how many players in this SW area will receive the £25 Champions Points prize.
-          All other completed games will automatically receive the default £10 prize.
+          Set the maximum number of £25 winners allowed in this SW area.
         </p>
 
         <label class="field">
-          <span>Number of £25 winners for this area</span>
+          <span>Max £25 winners for this area</span>
           <input
             id="prize25Input"
             type="number"
             min="0"
-            placeholder="e.g. 5"
+            step="1"
+            placeholder="e.g. 10"
           />
         </label>
 
         <button id="btnSavePrizes" class="btn btn-primary">
-          Save prize settings for this area
+          Save prize settings
         </button>
 
         <p id="prizeStatus" class="status"></p>
       </div>
 
       <!-- PLAYERS TABLE CARD -->
-      <div class="card admin-card">
-        <h2 id="usersForLabel">Players</h2>
+      <div class="card admin-card admin-card-wide">
+        <div class="admin-card-header-row">
+          <h2>Players</h2>
+          <button id="btnLoadUsers" class="btn btn-secondary btn-small">
+            Load / refresh area players
+          </button>
+        </div>
 
-        <table class="players-table">
-          <thead>
-            <tr>
-              <th>
-                <input type="checkbox" id="selectAllUsers" />
-              </th>
-              <th>Name</th>
-              <th>SW</th>
-              <th>Pos</th>
-              <th>Used</th>
-              <th>Granted</th>
-              <th>Completed</th>
-              <th>Reward</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="playersTableBody"></tbody>
-        </table>
+        <p id="usersForLabel" class="helper-text">
+          Players in SW1 (0)
+        </p>
+
+        <div class="table-wrapper">
+          <table class="table players-table">
+            <thead>
+              <tr>
+                <th>
+                  <input type="checkbox" id="selectAllUsers" />
+                </th>
+                <th>Email</th>
+                <th>Area</th>
+                <th>Position</th>
+                <th>Rolls used</th>
+                <th>Rolls granted</th>
+                <th>Completed</th>
+                <th>Reward</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="playersTableBody"></tbody>
+          </table>
+        </div>
 
         <p id="usersStatus" class="status"></p>
       </div>
