@@ -1,6 +1,6 @@
 // --- Snakes & Ladders Backend ---
-// Final fully-working version for Anthony Fenwick
-// Fixes: Admin login, roll granting, prize saving, lowercase emails, all routes matched to frontend.
+// COMPLETE VERSION — Admin login fixed, change-password now fully functional
+// Compatible with your current DB schema and frontend
 
 const express = require("express");
 const cors = require("cors");
@@ -20,44 +20,118 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// Lowercase helper
+// Helper for lowercase emails
 function normaliseEmail(email) {
   return email.trim().toLowerCase();
 }
 
 // ----------------------------------------------------------------------------------
-// ADMIN LOGIN  (FIXED – now uses plain-text admin password from Render env)
+// ADMIN CREDENTIALS INITIALISATION (NEW)
 // ----------------------------------------------------------------------------------
 
-app.post("/admin/login", (req, res) => {
+async function ensureAdminRow() {
   try {
-    const submitted = req.body.password;
-    const actual = process.env.ADMIN_PASSWORD;
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_credentials (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL,
+        password_hash TEXT NOT NULL
+      );
+    `);
 
-    if (!actual) {
-      return res.status(500).json({ error: "Admin password not set on server." });
+    const row = await pool.query(`SELECT * FROM admin_credentials WHERE id=1`);
+
+    if (row.rows.length === 0) {
+      const defaultUser = "admin";
+      const defaultPass = process.env.ADMIN_PASSWORD || "ChangeMe123!";
+      const hash = await bcrypt.hash(defaultPass, 10);
+
+      await pool.query(
+        `INSERT INTO admin_credentials (id, username, password_hash)
+         VALUES (1, $1, $2)`,
+        [defaultUser, hash]
+      );
+
+      console.log("Admin default credentials created. Username: admin");
+    }
+  } catch (err) {
+    console.error("Failed to ensure admin row:", err);
+  }
+}
+
+ensureAdminRow();
+
+// ----------------------------------------------------------------------------------
+// ADMIN LOGIN — NOW SECURE + MATCHES YOUR NEW FRONTEND
+// ----------------------------------------------------------------------------------
+
+app.post("/admin/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const row = await pool.query(
+      `SELECT username, password_hash FROM admin_credentials WHERE id=1`
+    );
+
+    if (row.rows.length === 0) {
+      return res.status(500).json({ error: "Admin credentials not found." });
     }
 
-    if (submitted === actual) {
-      return res.json({ success: true });
+    const admin = row.rows[0];
+
+    // Username check
+    if (username !== admin.username) {
+      return res.status(401).json({ error: "Invalid username or password." });
     }
 
-    return res.status(401).json({ error: "Failed to verify admin password." });
+    // Password check
+    const valid = await bcrypt.compare(password, admin.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid username or password." });
+    }
+
+    return res.json({ success: true });
   } catch (err) {
     console.error("Admin login error:", err);
-    return res.status(500).json({ error: "Server error." });
+    return res.status(500).json({ error: "Server error during admin login." });
   }
 });
 
 // ----------------------------------------------------------------------------------
-// CHANGE ADMIN PASSWORD (does NOT work on free Render – message only)
+// ADMIN CHANGE PASSWORD — NOW WORKING (no Render limitations)
 // ----------------------------------------------------------------------------------
 
-app.post("/admin/change-password", (req, res) => {
-  return res.json({
-    error:
-      "Admin password must be changed in Render → Environment Variables. Cannot modify from the admin portal.",
-  });
+app.post("/admin/change-password", async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    const row = await pool.query(
+      `SELECT password_hash FROM admin_credentials WHERE id=1`
+    );
+
+    if (row.rows.length === 0) {
+      return res.status(500).json({
+        error: "Admin credentials missing.",
+      });
+    }
+
+    const match = await bcrypt.compare(currentPassword, row.rows[0].password_hash);
+    if (!match) {
+      return res.status(401).json({ error: "Current password incorrect." });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      `UPDATE admin_credentials SET password_hash=$1 WHERE id=1`,
+      [newHash]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Change password error:", err);
+    return res.status(500).json({ error: "Server error changing password." });
+  }
 });
 
 // ----------------------------------------------------------------------------------
@@ -74,7 +148,7 @@ app.post("/player/register", async (req, res) => {
     ]);
 
     if (existing.rows.length > 0) {
-      return res.json({ success: true }); // Already exists, allowed
+      return res.json({ success: true });
     }
 
     await pool.query(
@@ -91,7 +165,7 @@ app.post("/player/register", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// PLAYER LOGIN (case-insensitive email fixed)
+// PLAYER LOGIN
 // ----------------------------------------------------------------------------------
 
 app.post("/player/login", async (req, res) => {
@@ -141,7 +215,7 @@ app.get("/player/state", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// PLAYER ROLL (game logic unchanged – using your current logic)
+// PLAYER ROLL — SAME AS YOUR VERSION
 // ----------------------------------------------------------------------------------
 
 app.post("/player/roll", async (req, res) => {
@@ -161,21 +235,18 @@ app.post("/player/roll", async (req, res) => {
 
     const player = playerRes.rows[0];
 
-    // Rolls remaining
     if (player.rolls_used >= player.rolls_granted + 6) {
       return res.status(400).json({ error: "No rolls left." });
     }
 
     let newPos = player.position + roll;
 
-    // Snakes & Ladders
     const snakes = { 17: 4, 19: 7, 27: 1 };
     const ladders = { 3: 22, 5: 8, 11: 26, 20: 29 };
 
     if (snakes[newPos]) newPos = snakes[newPos];
     if (ladders[newPos]) newPos = ladders[newPos];
 
-    // Clamp at 30
     if (newPos >= 30) newPos = 30;
 
     const completed = newPos === 30;
@@ -197,7 +268,7 @@ app.post("/player/roll", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// LOAD USERS FOR AN AREA
+// LOAD USERS FOR AREA
 // ----------------------------------------------------------------------------------
 
 app.get("/players", async (req, res) => {
@@ -216,7 +287,7 @@ app.get("/players", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// GRANT ROLLS TO SELECTED / AREA
+// GRANT ROLLS
 // ----------------------------------------------------------------------------------
 
 app.post("/grant-rolls", async (req, res) => {
@@ -250,7 +321,7 @@ app.post("/grant-rolls", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// UNDO LAST GRANT
+// UNDO GRANTS
 // ----------------------------------------------------------------------------------
 
 app.post("/undo-rolls", async (req, res) => {
@@ -272,7 +343,7 @@ app.post("/undo-rolls", async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------------
-// PRIZE CONFIG (FIXED)
+// PRIZE CONFIG
 // ----------------------------------------------------------------------------------
 
 app.post("/area/prize", async (req, res) => {
