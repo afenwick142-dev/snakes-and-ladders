@@ -1,6 +1,8 @@
 // admin.js
 
-const BACKEND_BASE_URL = "https://snakes-ladders-backend-github.onrender.com";
+const BACKEND_BASE_URL =
+  window.SNAKES_BACKEND_URL ||
+  "https://snakes-ladders-backend-github.onrender.com";
 
 document.addEventListener("DOMContentLoaded", () => {
   // Sections
@@ -36,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnGrantRollsArea = document.getElementById("btnGrantRollsArea");
   const btnGrantRollsSelected = document.getElementById(
     "btnGrantRollsSelected"
-  ); // if present
+  );
   const btnUndoLastGrant = document.getElementById("btnUndoLastGrant");
   const grantStatus = document.getElementById("grantStatus");
 
@@ -115,10 +117,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
+      // DB-based /admin/login: expects username + password
       const res = await fetch(`${BACKEND_BASE_URL}/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd }),
+        body: JSON.stringify({ username: "admin", password: pwd }),
       });
 
       const data = await res.json().catch(() => null);
@@ -176,12 +179,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json().catch(() => null);
 
-      // In the env-based version this always returns { error: "..."}.
       if (!res.ok || !data || !data.success) {
         setStatus(
           adminChangePasswordStatus,
           (data && (data.error || data.message)) ||
-            "Backend does not allow changing the admin password here. Update ADMIN_PASSWORD in Render.",
+            "Unable to change admin password. Check current password.",
           6000
         );
         return;
@@ -302,17 +304,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!res.ok || !Array.isArray(data)) {
         setStatus(
           usersStatus,
-          (data && (data.error || data.message)) ||
-            "Failed to load players for this area.",
+          (data && (data.error || data.message)) || "Failed to load users.",
           4000
         );
         return;
       }
 
-      renderUsersTable(data);
+      const users = data;
+      renderUsersTable(users);
       setStatus(
         usersStatus,
-        `Loaded ${data.length} player(s) for ${currentSW}.`,
+        `Loaded ${users.length} player(s) for ${currentSW}.`,
         3000
       );
     } catch (err) {
@@ -425,7 +427,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       if (lastGrantAction.type === "area") {
-        // Use the same endpoint with negative count
         const res = await fetch(`${BACKEND_BASE_URL}/grant-rolls`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -629,8 +630,4 @@ document.addEventListener("DOMContentLoaded", () => {
       updateUsersLabel(0);
     });
   }
-
-  // If you want admin.html to *require* login from admin-login.html first:
-  // you could check localStorage here and redirect if needed.
-  // For now we just show the inline login section by default.
 });
