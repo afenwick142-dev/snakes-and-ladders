@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "btnShowChangePassword"
   );
 
-  // Change password controls
+  // Change password controls (inline on admin.html)
   const adminNewPasswordInput = document.getElementById(
     "adminNewPasswordInput"
   );
@@ -34,6 +34,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const swRegionSelect = document.getElementById("swRegionSelect");
   const extraRollsInput = document.getElementById("extraRollsInput");
   const btnGrantRollsArea = document.getElementById("btnGrantRollsArea");
+  const btnGrantRollsSelected = document.getElementById(
+    "btnGrantRollsSelected"
+  ); // if present
   const btnUndoLastGrant = document.getElementById("btnUndoLastGrant");
   const grantStatus = document.getElementById("grantStatus");
 
@@ -51,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentAdminPassword = "";
   let currentSW = swRegionSelect ? swRegionSelect.value : "SW1";
 
-  // { type: 'region'|'user'|'multi-users', swCode?, userId?, userIds?, extraRolls }
+  // { type: 'area' | 'emails', area, emails?, count }
   let lastGrantAction = null;
 
   // ---------- Helpers ----------
@@ -84,17 +87,17 @@ document.addEventListener("DOMContentLoaded", () => {
     return true;
   }
 
-  function getSelectedUserIds() {
-    const ids = [];
-    if (!playersTableBody) return ids;
+  function getSelectedEmails() {
+    const emails = [];
+    if (!playersTableBody) return emails;
     const checkboxes = playersTableBody.querySelectorAll(
-      'input[type="checkbox"][data-user-id]:checked'
+      'input[type="checkbox"][data-email]:checked'
     );
     checkboxes.forEach((cb) => {
-      const id = parseInt(cb.getAttribute("data-user-id"), 10);
-      if (!isNaN(id)) ids.push(id);
+      const email = cb.getAttribute("data-email");
+      if (email) emails.push(email);
     });
-    return ids;
+    return emails;
   }
 
   function updateUsersLabel(count) {
@@ -112,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/login`, {
+      const res = await fetch(`${BACKEND_BASE_URL}/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: pwd }),
@@ -120,10 +123,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok || !data || !data.success) {
         setStatus(
           adminLoginStatus,
-          (data && data.error) || "Failed to verify admin password.",
+          (data && (data.error || data.message)) ||
+            "Failed to verify admin password.",
           4000
         );
         return;
@@ -138,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
       show(adminPanelSection);
 
       // Immediately load users for current area
-      loadUsersForArea();
+      await loadUsersForArea();
     } catch (err) {
       console.error("Admin login error:", err);
       setStatus(
@@ -149,7 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function handleChangePassword() {
+  async function handleInlineChangePassword() {
     const newPwd = adminNewPasswordInput.value.trim();
 
     if (!newPwd) {
@@ -160,9 +164,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // If backend is env-only, this will likely return an error message – we just display it.
     try {
-      const res = await fetch(`${API_BASE}/api/admin/change-password`, {
+      const res = await fetch(`${BACKEND_BASE_URL}/admin/change-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -173,10 +176,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      // In the env-based version this always returns { error: "..."}.
+      if (!res.ok || !data || !data.success) {
         setStatus(
           adminChangePasswordStatus,
-          (data && data.error) ||
+          (data && (data.error || data.message)) ||
             "Backend does not allow changing the admin password here. Update ADMIN_PASSWORD in Render.",
           6000
         );
@@ -209,80 +213,59 @@ document.addEventListener("DOMContentLoaded", () => {
     users.forEach((u) => {
       const tr = document.createElement("tr");
 
+      const email = u.email || "";
+      const area = u.area || currentSW;
+      const pos = u.position ?? 0;
+      const used = u.rolls_used ?? 0;
+      const granted = u.rolls_granted ?? 0;
+      const completed = !!u.completed;
+      const reward = u.reward;
+
       const tdCheck = document.createElement("td");
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.setAttribute("data-user-id", u.user_id);
+      cb.setAttribute("data-email", email);
       tdCheck.appendChild(cb);
 
       const tdName = document.createElement("td");
-      tdName.textContent = u.username || "";
+      tdName.textContent = email || "";
 
       const tdSW = document.createElement("td");
-      tdSW.textContent = u.sw_code || "";
+      tdSW.textContent = area;
 
       const tdPos = document.createElement("td");
-      tdPos.textContent = u.current_position ?? 0;
+      tdPos.textContent = pos;
 
       const tdUsed = document.createElement("td");
-      tdUsed.textContent = u.rolls_used ?? 0;
+      tdUsed.textContent = used;
 
       const tdGranted = document.createElement("td");
-      tdGranted.textContent = u.rolls_granted ?? 0;
+      tdGranted.textContent = granted;
 
       const tdCompleted = document.createElement("td");
-      tdCompleted.textContent = u.completed ? "Yes" : "No";
+      tdCompleted.textContent = completed ? "Yes" : "No";
 
       const tdReward = document.createElement("td");
-      if (u.reward_won && u.reward_won > 0) {
-        tdReward.textContent = `£${u.reward_won}`;
+      if (reward && reward > 0) {
+        tdReward.textContent = `£${reward}`;
       } else {
         tdReward.textContent = "–";
       }
 
       const tdActions = document.createElement("td");
-
       const btnAddRolls = document.createElement("button");
       btnAddRolls.className = "btn-small";
       btnAddRolls.textContent = "+ rolls";
       btnAddRolls.addEventListener("click", () => {
         const extra = parseInt(
-          prompt("How many extra rolls for this player?", "1") || "0",
+          prompt(`How many extra rolls for ${email}?`, "1") || "0",
           10
         );
         if (!extra || isNaN(extra) || extra <= 0) return;
-        grantRollsToUsers([u.user_id], extra);
-      });
-
-      const btnReset = document.createElement("button");
-      btnReset.className = "btn-small secondary";
-      btnReset.textContent = "Reset";
-      btnReset.addEventListener("click", () => {
-        if (
-          confirm(
-            `Reset game for ${u.username}? This will clear their position, rolls and reward.`
-          )
-        ) {
-          resetGameForUser(u.user_id);
-        }
-      });
-
-      const btnDelete = document.createElement("button");
-      btnDelete.className = "btn-small danger";
-      btnDelete.textContent = "Delete";
-      btnDelete.addEventListener("click", () => {
-        if (
-          confirm(
-            `Delete player ${u.username} and all their data? This cannot be undone.`
-          )
-        ) {
-          deleteUser(u.user_id);
-        }
+        grantRollsToEmails([email], extra);
       });
 
       tdActions.appendChild(btnAddRolls);
-      tdActions.appendChild(btnReset);
-      tdActions.appendChild(btnDelete);
 
       tr.appendChild(tdCheck);
       tr.appendChild(tdName);
@@ -310,27 +293,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!ensureLoggedIn(usersStatus)) return;
 
     try {
-      const url = new URL(`${API_BASE}/api/admin/users`);
-      url.searchParams.set("password", currentAdminPassword);
-      url.searchParams.set("swCode", currentSW);
+      const url = new URL(`${BACKEND_BASE_URL}/players`);
+      url.searchParams.set("area", currentSW);
 
       const res = await fetch(url.toString());
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok || !Array.isArray(data)) {
         setStatus(
           usersStatus,
-          (data && data.error) || "Failed to load users.",
+          (data && (data.error || data.message)) ||
+            "Failed to load players for this area.",
           4000
         );
         return;
       }
 
-      const users = data && Array.isArray(data.users) ? data.users : [];
-      renderUsersTable(users);
+      renderUsersTable(data);
       setStatus(
         usersStatus,
-        `Loaded ${users.length} player(s) for ${currentSW}.`,
+        `Loaded ${data.length} player(s) for ${currentSW}.`,
         3000
       );
     } catch (err) {
@@ -343,22 +325,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!ensureLoggedIn(grantStatus)) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/grant-rolls`, {
+      const res = await fetch(`${BACKEND_BASE_URL}/grant-rolls`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          password: currentAdminPassword,
-          swCode: currentSW,
-          extraRolls,
+          area: currentSW,
+          count: extraRolls,
         }),
       });
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok || !data || !data.success) {
         setStatus(
           grantStatus,
-          (data && data.error) || "Error granting rolls to area.",
+          (data && (data.error || data.message)) ||
+            "Error granting rolls to area.",
           4000
         );
         return;
@@ -371,9 +353,9 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       lastGrantAction = {
-        type: "region",
-        swCode: currentSW,
-        extraRolls,
+        type: "area",
+        area: currentSW,
+        count: extraRolls,
       };
 
       await loadUsersForArea();
@@ -383,47 +365,49 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function grantRollsToUsers(userIds, extraRolls) {
+  async function grantRollsToEmails(emails, extraRolls) {
     if (!ensureLoggedIn(grantStatus)) return;
-    if (!userIds || !userIds.length) return;
+    if (!emails || !emails.length) return;
 
     try {
-      await Promise.all(
-        userIds.map((userId) =>
-          fetch(`${API_BASE}/api/admin/grant-rolls-user`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              password: currentAdminPassword,
-              userId,
-              extraRolls,
-            }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => null);
-              throw new Error(
-                (data && data.error) ||
-                  "Error granting rolls to one of the players."
-              );
-            }
-          })
-        )
-      );
+      const res = await fetch(`${BACKEND_BASE_URL}/grant-rolls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emails,
+          area: currentSW,
+          count: extraRolls,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || !data.success) {
+        setStatus(
+          grantStatus,
+          (data && (data.error || data.message)) ||
+            "Error granting rolls to selected players.",
+          4000
+        );
+        return;
+      }
 
       setStatus(
         grantStatus,
-        `Granted ${extraRolls} roll(s) to ${userIds.length} selected player(s).`,
+        `Granted ${extraRolls} roll(s) to ${emails.length} player(s).`,
         4000
       );
 
-      lastGrantAction =
-        userIds.length === 1
-          ? { type: "user", userId: userIds[0], extraRolls }
-          : { type: "multi-users", userIds: [...userIds], extraRolls };
+      lastGrantAction = {
+        type: "emails",
+        area: currentSW,
+        emails,
+        count: extraRolls,
+      };
 
       await loadUsersForArea();
     } catch (err) {
-      console.error("grantRollsToUsers error:", err);
+      console.error("grantRollsToEmails error:", err);
       setStatus(
         grantStatus,
         "Error granting rolls to selected players.",
@@ -435,67 +419,47 @@ document.addEventListener("DOMContentLoaded", () => {
   async function undoLastGrant() {
     if (!ensureLoggedIn(grantStatus)) return;
     if (!lastGrantAction) {
-      setStatus(grantStatus, "No previous grant action to undo.", 3000);
+      setStatus(grantStatus, "No grant action to undo.", 3000);
       return;
     }
 
     try {
-      if (lastGrantAction.type === "region") {
-        const res = await fetch(`${API_BASE}/api/admin/grant-rolls`, {
+      if (lastGrantAction.type === "area") {
+        // Use the same endpoint with negative count
+        const res = await fetch(`${BACKEND_BASE_URL}/grant-rolls`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            password: currentAdminPassword,
-            swCode: lastGrantAction.swCode,
-            extraRolls: -lastGrantAction.extraRolls,
+            area: lastGrantAction.area,
+            count: -lastGrantAction.count,
           }),
         });
 
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           throw new Error(
-            (data && data.error) || "Failed to undo last area grant."
+            (data && (data.error || data.message)) ||
+              "Failed to undo last area grant."
           );
         }
-      } else if (lastGrantAction.type === "user") {
-        const res = await fetch(`${API_BASE}/api/admin/grant-rolls-user`, {
+      } else if (lastGrantAction.type === "emails") {
+        const res = await fetch(`${BACKEND_BASE_URL}/grant-rolls`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            password: currentAdminPassword,
-            userId: lastGrantAction.userId,
-            extraRolls: -lastGrantAction.extraRolls,
+            emails: lastGrantAction.emails,
+            area: lastGrantAction.area,
+            count: -lastGrantAction.count,
           }),
         });
 
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           throw new Error(
-            (data && data.error) || "Failed to undo last user grant."
+            (data && (data.error || data.message)) ||
+              "Failed to undo last selected-player grant."
           );
         }
-      } else if (lastGrantAction.type === "multi-users") {
-        await Promise.all(
-          lastGrantAction.userIds.map((userId) =>
-            fetch(`${API_BASE}/api/admin/grant-rolls-user`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                password: currentAdminPassword,
-                userId,
-                extraRolls: -lastGrantAction.extraRolls,
-              }),
-            }).then(async (res) => {
-              if (!res.ok) {
-                const data = await res.json().catch(() => null);
-                throw new Error(
-                  (data && data.error) ||
-                    "Failed to undo last multi-user grant."
-                );
-              }
-            })
-          )
-        );
       }
 
       lastGrantAction = null;
@@ -508,70 +472,6 @@ document.addEventListener("DOMContentLoaded", () => {
         "Error undoing last grant action. Please try again.",
         4000
       );
-    }
-  }
-
-  async function resetGameForUser(userId) {
-    if (!ensureLoggedIn(usersStatus)) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/reset-game`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          password: currentAdminPassword,
-          userId,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setStatus(
-          usersStatus,
-          (data && data.error) || "Failed to reset player game.",
-          4000
-        );
-        return;
-      }
-
-      setStatus(usersStatus, "Game reset for player.", 3000);
-      await loadUsersForArea();
-    } catch (err) {
-      console.error("resetGameForUser error:", err);
-      setStatus(usersStatus, "Error resetting game.", 4000);
-    }
-  }
-
-  async function deleteUser(userId) {
-    if (!ensureLoggedIn(usersStatus)) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/delete-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          password: currentAdminPassword,
-          userId,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setStatus(
-          usersStatus,
-          (data && data.error) || "Failed to delete player.",
-          4000
-        );
-        return;
-      }
-
-      setStatus(usersStatus, "Player deleted.", 3000);
-      await loadUsersForArea();
-    } catch (err) {
-      console.error("deleteUser error:", err);
-      setStatus(usersStatus, "Error deleting player.", 4000);
     }
   }
 
@@ -591,22 +491,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/admin/prizes`, {
+      const res = await fetch(`${BACKEND_BASE_URL}/area/prize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          password: currentAdminPassword,
-          swCode: currentSW,
-          max25,
+          area: currentSW,
+          count: max25,
         }),
       });
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok || !data || !data.success) {
         setStatus(
           prizeStatus,
-          (data && data.error) || "Failed to save prize settings.",
+          (data && (data.error || data.message)) ||
+            "Failed to save prize settings.",
           4000
         );
         return;
@@ -642,8 +542,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnCancelPasswordChange) {
     btnCancelPasswordChange.addEventListener("click", () => {
-      show(adminLoginSection);
       hide(adminChangePasswordSection);
+      show(adminLoginSection);
       hide(adminPanelSection);
     });
   }
@@ -651,53 +551,71 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnChangePassword) {
     btnChangePassword.addEventListener("click", (e) => {
       e.preventDefault();
-      handleChangePassword();
-    });
-  }
-
-  if (swRegionSelect) {
-    swRegionSelect.addEventListener("change", () => {
-      currentSW = swRegionSelect.value;
-      updateUsersLabel(0);
-      if (playersTableBody) playersTableBody.innerHTML = "";
-      if (usersStatus) usersStatus.textContent = "";
+      handleInlineChangePassword();
     });
   }
 
   if (btnLoadUsers) {
-    btnLoadUsers.addEventListener("click", () => loadUsersForArea());
+    btnLoadUsers.addEventListener("click", (e) => {
+      e.preventDefault();
+      loadUsersForArea();
+    });
   }
 
   if (btnGrantRollsArea) {
-    btnGrantRollsArea.addEventListener("click", () => {
-      const extra = parseInt(extraRollsInput.value, 10) || 0;
-      if (!extra || extra <= 0) {
-        setStatus(grantStatus, "Enter a positive number of rolls.", 3000);
+    btnGrantRollsArea.addEventListener("click", (e) => {
+      e.preventDefault();
+      const raw = extraRollsInput.value.trim();
+      const extra = parseInt(raw, 10);
+      if (!Number.isInteger(extra) || extra <= 0) {
+        setStatus(grantStatus, "Enter a positive whole number of rolls.", 3000);
         return;
       }
+      grantRollsToArea(extra);
+    });
+  }
 
-      const selectedIds = getSelectedUserIds();
-      if (selectedIds.length > 0) {
-        grantRollsToUsers(selectedIds, extra);
-      } else {
-        grantRollsToArea(extra);
+  if (btnGrantRollsSelected) {
+    btnGrantRollsSelected.addEventListener("click", (e) => {
+      e.preventDefault();
+      const emails = getSelectedEmails();
+      if (!emails.length) {
+        setStatus(
+          grantStatus,
+          "Select at least one player to grant rolls.",
+          3000
+        );
+        return;
       }
+      const raw = extraRollsInput.value.trim();
+      const extra = parseInt(raw, 10);
+      if (!Number.isInteger(extra) || extra <= 0) {
+        setStatus(grantStatus, "Enter a positive whole number of rolls.", 3000);
+        return;
+      }
+      grantRollsToEmails(emails, extra);
     });
   }
 
   if (btnUndoLastGrant) {
-    btnUndoLastGrant.addEventListener("click", () => undoLastGrant());
+    btnUndoLastGrant.addEventListener("click", (e) => {
+      e.preventDefault();
+      undoLastGrant();
+    });
   }
 
   if (btnSavePrizes) {
-    btnSavePrizes.addEventListener("click", () => savePrizes());
+    btnSavePrizes.addEventListener("click", (e) => {
+      e.preventDefault();
+      savePrizes();
+    });
   }
 
-  if (selectAllUsersCheckbox && playersTableBody) {
+  if (selectAllUsersCheckbox) {
     selectAllUsersCheckbox.addEventListener("change", () => {
       const checked = selectAllUsersCheckbox.checked;
       const checkboxes = playersTableBody.querySelectorAll(
-        'input[type="checkbox"][data-user-id]'
+        'input[type="checkbox"][data-email]'
       );
       checkboxes.forEach((cb) => {
         cb.checked = checked;
@@ -705,7 +623,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Initial label
-  updateUsersLabel(0);
-});
+  if (swRegionSelect) {
+    swRegionSelect.addEventListener("change", () => {
+      currentSW = swRegionSelect.value || "SW1";
+      updateUsersLabel(0);
+    });
+  }
 
+  // If you want admin.html to *require* login from admin-login.html first:
+  // you could check localStorage here and redirect if needed.
+  // For now we just show the inline login section by default.
+});
