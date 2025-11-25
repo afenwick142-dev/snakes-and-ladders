@@ -2,44 +2,43 @@
 
 const BACKEND_BASE_URL =
   window.SNAKES_BACKEND_URL ||
-  'https://YOUR-BACKEND-ON-RENDER.com'; // <-- same as in admin-login.js
+  "https://snakes-ladders-backend.onrender.com";
 
-document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('admin-change-form');
-  const button = document.getElementById('admin-change-button');
-  const messageEl = document.getElementById('admin-change-message');
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("admin-change-form");
+  const button = document.getElementById("admin-change-button");
+  const messageEl = document.getElementById("admin-change-message");
 
   if (!form || !button || !messageEl) {
-    console.error('Admin change password elements not found in DOM.');
+    console.error("Admin change password elements not found in DOM.");
     return;
   }
 
-  form.addEventListener('submit', async (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const currentPasswordInput = document.getElementById('current-password');
-    const newPasswordInput = document.getElementById('new-password');
+    const currentPasswordInput = document.getElementById("current-password");
+    const newPasswordInput = document.getElementById("new-password");
 
     const currentPassword = currentPasswordInput.value;
     const newPassword = newPasswordInput.value;
 
     if (!currentPassword || !newPassword) {
-      showMessage('Please fill in both fields.', 'error');
+      showMessage("Please fill in both fields.", "error");
       return;
     }
 
     button.disabled = true;
-    showMessage('Updating password...', 'info');
+    showMessage("Updating password...", "info");
 
     try {
       const response = await fetch(
-        `${BACKEND_BASE_URL}/api/admin/change-password`,
+        `${BACKEND_BASE_URL}/admin/change-password`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
-          credentials: 'include',
           body: JSON.stringify({ currentPassword, newPassword }),
         }
       );
@@ -48,33 +47,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!response.ok || !data.success) {
         const msg =
-          data && data.message
-            ? data.message
-            : 'Unable to update password. Please try again.';
-        showMessage(msg, 'error');
+          data && data.error
+            ? data.error
+            : "Unable to update password. Please try again.";
+        showMessage(msg, "error");
         button.disabled = false;
         return;
       }
 
-      showMessage('Password updated successfully.', 'success');
-      currentPasswordInput.value = '';
-      newPasswordInput.value = '';
+      showMessage("Password updated successfully.", "success");
+      currentPasswordInput.value = "";
+      newPasswordInput.value = "";
       button.disabled = false;
     } catch (err) {
-      console.error('Error updating admin password:', err);
-      showMessage('Server error while updating password.', 'error');
+      console.error("Error updating admin password:", err);
+      showMessage("Server error while updating password.", "error");
       button.disabled = false;
     }
   });
 
   function showMessage(text, type) {
     messageEl.textContent = text;
-    messageEl.classList.remove('error', 'success');
+    messageEl.classList.remove("error", "success");
 
-    if (type === 'error') {
-      messageEl.classList.add('error');
-    } else if (type === 'success') {
-      messageEl.classList.add('success');
+    if (type === "error") {
+      messageEl.classList.add("error");
+    } else if (type === "success") {
+      messageEl.classList.add("success");
     }
   }
 });
