@@ -3,7 +3,8 @@
 // - Auto-creates all required tables
 // - Player register/login/state/roll
 // - Admin login/password change
-// - Admin roll granting + prize settings
+// - Admin roll granting + prize settings + undo
+// - Player reset & delete
 // - Designed to work with EdgeOne frontend calling this backend.
 
 const express = require("express");
@@ -88,6 +89,17 @@ async function initDatabase() {
       id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL
+    );
+  `);
+
+  // grant_history table: used for per-area undo of last grant
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS grant_history (
+      id SERIAL PRIMARY KEY,
+      area TEXT NOT NULL,
+      emails TEXT[],
+      count INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -351,6 +363,68 @@ app.post("/player/roll", async (req, res) => {
   }
 });
 
+// Reset a player's progress in a given area
+app.post("/player/reset", async (req, res) => {
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    if (!email || !area) {
+      return res.status(400).json({ error: "Email and area are required." });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE players
+      SET position = 0,
+          rolls_used = 0,
+          rolls_granted = 0,
+          completed = false,
+          reward = NULL
+      WHERE email = $1 AND area = $2
+      `,
+      [email, area]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Player not found." });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Reset player error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+// Delete a player entirely from an area
+app.post("/player/delete", async (req, res) => {
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    if (!email || !area) {
+      return res.status(400).json({ error: "Email and area are required." });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM players WHERE email = $1 AND area = $2",
+      [email, area]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Player not found." });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Delete player error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // ADMIN ROUTES
 // -----------------------------------------------------------------------------
@@ -380,14 +454,16 @@ app.get("/players", async (req, res) => {
   }
 });
 
-// Grant rolls to area or specific emails
+// Grant rolls to area or specific emails (records history)
 app.post("/grant-rolls", async (req, res) => {
+  const client = await pool.connect();
   try {
     let { area, emails, count } = req.body;
     area = normaliseArea(area);
     count = parseInt(count, 10);
 
     if (!area || !Number.isInteger(count) || count === 0) {
+      client.release();
       return res
         .status(400)
         .json({ error: "Area and non-zero integer count are required." });
@@ -395,15 +471,16 @@ app.post("/grant-rolls", async (req, res) => {
 
     let query;
     let params;
+    let emailsArray = null;
 
     if (Array.isArray(emails) && emails.length > 0) {
-      const normEmails = emails.map(normaliseEmail);
+      emailsArray = emails.map(normaliseEmail);
       query = `
         UPDATE players
         SET rolls_granted = GREATEST(0, rolls_granted + $1)
         WHERE area = $2 AND email = ANY($3::text[])
       `;
-      params = [count, area, normEmails];
+      params = [count, area, emailsArray];
     } else {
       query = `
         UPDATE players
@@ -413,10 +490,102 @@ app.post("/grant-rolls", async (req, res) => {
       params = [count, area];
     }
 
-    const result = await pool.query(query, params);
+    await client.query("BEGIN");
+    const result = await client.query(query, params);
+
+    // Only record history for positive grants that actually affected rows
+    if (count > 0 && result.rowCount > 0) {
+      await client.query(
+        `
+        INSERT INTO grant_history (area, emails, count)
+        VALUES ($1, $2, $3)
+        `,
+        [area, emailsArray, count]
+      );
+    }
+
+    await client.query("COMMIT");
+    client.release();
+
     return res.json({ success: true, affected: result.rowCount });
   } catch (err) {
+    await client.query("ROLLBACK");
+    client.release();
     console.error("Grant rolls error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+// Undo last grant for an area (per-area undo)
+app.post("/grant-rolls/undo", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    let { area } = req.body;
+    area = normaliseArea(area);
+
+    if (!area) {
+      client.release();
+      return res.status(400).json({ error: "Area is required." });
+    }
+
+    await client.query("BEGIN");
+
+    // Get the most recent grant for this area
+    const histResult = await client.query(
+      `
+      SELECT id, emails, count
+      FROM grant_history
+      WHERE area = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [area]
+    );
+
+    if (histResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res
+        .status(404)
+        .json({ error: "No grant history for this area to undo." });
+    }
+
+    const hist = histResult.rows[0];
+    const inverseCount = -hist.count;
+
+    let query;
+    let params;
+
+    if (Array.isArray(hist.emails) && hist.emails.length > 0) {
+      query = `
+        UPDATE players
+        SET rolls_granted = GREATEST(0, rolls_granted + $1)
+        WHERE area = $2 AND email = ANY($3::text[])
+      `;
+      params = [inverseCount, area, hist.emails];
+    } else {
+      query = `
+        UPDATE players
+        SET rolls_granted = GREATEST(0, rolls_granted + $1)
+        WHERE area = $2
+      `;
+      params = [inverseCount, area];
+    }
+
+    const result = await client.query(query, params);
+
+    // Delete this history row now that we've undone it
+    await client.query("DELETE FROM grant_history WHERE id = $1", [hist.id]);
+
+    await client.query("COMMIT");
+    client.release();
+
+    return res.json({ success: true, affected: result.rowCount });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    client.release();
+    console.error("Undo grant error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
