@@ -1,12 +1,5 @@
 // game.js
 // Front-end logic for Snakes & Ladders
-// - Works with existing game.html + style.css
-// - Uses backend at /player/* and /area/*
-// - Animates piece across the board
-// - S1: snakes slide along a curved path
-// - L1: ladders climb vertically
-// - Shows big congratulations modal + confetti
-// - Dice shows a rolling animation, then the final face
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
@@ -34,7 +27,7 @@ const statusCaption = document.getElementById("statusCaption");
 // counter style choices
 const counterChoiceButtons = document.querySelectorAll(".counter-choice");
 
-// confetti canvas – this class already exists in your HTML
+// confetti overlay container (already in HTML)
 const confettiCanvas = document.getElementById("confetti");
 
 // winner overlay
@@ -54,7 +47,6 @@ let email = localStorage.getItem("playerEmail");
 let area = localStorage.getItem("playerArea");
 
 if (!email || !area) {
-  // Not logged in properly
   window.location.href = "index.html";
 }
 
@@ -74,7 +66,6 @@ const ROWS = 5;
 const COLS = 6;
 const FINAL_SQUARE = 30;
 
-// ladders and snakes as agreed
 const JUMPS = {
   3: 22,
   5: 8,
@@ -88,105 +79,57 @@ const JUMPS = {
 const SNAKE_HEADS = new Set([17, 19, 27]);
 const LADDER_BASES = new Set([3, 5, 11, 20]);
 
-// map from position -> cell element
-const cellsByPosition = {};
+// ---- Board helpers ----
+function indexToRowCol(square) {
+  const zero = square - 1;
+  const rowFromBottom = Math.floor(zero / COLS);
+  const colInRow = zero % COLS;
+  const row = ROWS - 1 - rowFromBottom;
+  const isOddRowFromBottom = rowFromBottom % 2 === 1;
 
-// ---- Ensure overlay + counter exist ----
-function ensureOverlayAndCounter() {
-  if (!boardGridEl) {
-    const boardContainer =
-      document.querySelector(".board-container") ||
-      document.querySelector(".card-board") ||
-      document.body;
-
-    boardGridEl = document.createElement("div");
-    boardGridEl.id = "boardGrid";
-    boardGridEl.className = "board-grid";
-    Object.assign(boardGridEl.style, {
-      position: "relative",
-      width: "100%",
-      height: "100%"
-    });
-
-    boardContainer.appendChild(boardGridEl);
-  }
-
-  if (!counterEl) {
-    counterEl = document.createElement("div");
-    counterEl.id = "counter";
-    counterEl.className = "counter";
-    boardGridEl.appendChild(counterEl);
-  }
-
-  // make sure it's above the board image
-  counterEl.style.position = "absolute";
-  counterEl.style.zIndex = "10";
+  const col = isOddRowFromBottom ? COLS - 1 - colInRow : colInRow;
+  return { row, col };
 }
 
-// ---- Build logical 5x6 grid overlay ----
 function buildBoardGrid() {
-  ensureOverlayAndCounter();
+  if (!boardGridEl) return;
 
-  const existingCounter = counterEl;
-  boardGridEl.innerHTML = "";
-  boardGridEl.appendChild(existingCounter);
+  const boardRect = boardGridEl.getBoundingClientRect();
+  const cellWidth = boardRect.width / COLS;
+  const cellHeight = boardRect.height / ROWS;
 
-  const allCells = [];
-  for (let i = 0; i < FINAL_SQUARE; i++) {
+  const frag = document.createDocumentFragment();
+
+  for (let square = 1; square <= FINAL_SQUARE; square++) {
+    const { row, col } = indexToRowCol(square);
     const cell = document.createElement("div");
-    cell.className = "board-cell";
-    Object.assign(cell.style, { position: "absolute" });
-    boardGridEl.appendChild(cell);
-    allCells.push(cell);
+    cell.className = "grid-cell";
+    cell.dataset.square = String(square);
+    cell.style.position = "absolute";
+    cell.style.left = `${col * cellWidth}px`;
+    cell.style.top = `${row * cellHeight}px`;
+    cell.style.width = `${cellWidth}px`;
+    cell.style.height = `${cellHeight}px`;
+    frag.appendChild(cell);
   }
 
-  const rect = boardGridEl.getBoundingClientRect();
-  const cellW = rect.width / COLS;
-  const cellH = rect.height / ROWS;
-
-  let pos = 1;
-
-  for (let rFromBottom = 0; rFromBottom < ROWS; rFromBottom++) {
-    const realRowIndex = ROWS - 1 - rFromBottom; // top->bottom index
-    const leftToRight = rFromBottom % 2 === 0;   // 1st,3rd,5th rows L→R
-
-    for (let col = 0; col < COLS; col++) {
-      const visualCol = leftToRight ? col : COLS - 1 - col;
-      const x = visualCol * cellW;
-      const y = realRowIndex * cellH;
-
-      const cell = allCells[realRowIndex * COLS + col];
-      Object.assign(cell.style, {
-        left: `${x}px`,
-        top: `${y}px`,
-        width: `${cellW}px`,
-        height: `${cellH}px`
-      });
-
-      cellsByPosition[pos] = cell;
-      cell.dataset.position = String(pos);
-      pos++;
-    }
-  }
+  boardGridEl.innerHTML = "";
+  boardGridEl.style.position = "relative";
+  boardGridEl.appendChild(frag);
 }
 
-// helper to get cell centre in grid coordinates
-function getCellCenter(position) {
-  const cell = cellsByPosition[position];
-  if (!cell || !boardGridEl) return { x: 0, y: 0 };
-
-  const gridRect = boardGridEl.getBoundingClientRect();
-  const cellRect = cell.getBoundingClientRect();
-
-  const x = cellRect.left + cellRect.width / 2 - gridRect.left;
-  const y = cellRect.top + cellRect.height / 2 - gridRect.top;
-
+function getCellCenter(square) {
+  const cell = boardGridEl.querySelector(`[data-square="${square}"]`);
+  if (!cell) return { x: 0, y: 0 };
+  const rect = cell.getBoundingClientRect();
+  const boardRect = boardGridEl.getBoundingClientRect();
+  const x = rect.left - boardRect.left + rect.width / 2;
+  const y = rect.top - boardRect.top + rect.height / 2;
   return { x, y };
 }
 
 function placeCounter(position) {
   if (!counterEl || !boardGridEl) return;
-
   const { x, y } = getCellCenter(position);
   counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
   counterEl.classList.remove("hidden");
@@ -203,12 +146,22 @@ let isAnimating = false;
 // ---- Status UI ----
 function updateStatusUI() {
   const remaining = Math.max(0, rollsGranted - rollsUsed);
+  const squaresLeft = Math.max(0, FINAL_SQUARE - currentPosition);
+
+  // "Guaranteed to complete" purely on worst-case rolls of 1 (no jumps)
+  const isGuaranteed =
+    !gameCompleted && squaresLeft > 0 && remaining >= squaresLeft;
+
+  const potentialReward =
+    currentReward != null ? currentReward : isGuaranteed ? 10 : null;
 
   if (statusPosition) statusPosition.textContent = String(currentPosition);
   if (statusRollsUsed) statusRollsUsed.textContent = String(rollsUsed);
   if (statusRollsGranted) statusRollsGranted.textContent = String(rollsGranted);
   if (statusReward)
-    statusReward.textContent = currentReward ? `£${currentReward}` : "—";
+    statusReward.textContent = potentialReward
+      ? `£${potentialReward}`
+      : "—";
 
   if (statusPositionText)
     statusPositionText.textContent = `Position: ${currentPosition} / ${FINAL_SQUARE}`;
@@ -218,12 +171,19 @@ function updateStatusUI() {
     statusRollsGrantedText.textContent = `Rolls granted: ${rollsGranted}`;
   if (statusRewardText)
     statusRewardText.textContent = `Reward: ${
-      currentReward ? "£" + currentReward : "—"
+      currentReward != null
+        ? "£" + currentReward
+        : isGuaranteed
+        ? "£10 (guaranteed)"
+        : "—"
     }`;
 
   if (statusCaption) {
     if (gameCompleted) {
       statusCaption.textContent = "Game complete – well done!";
+    } else if (isGuaranteed) {
+      statusCaption.textContent =
+        "You are now guaranteed to reach square 30 and earn £10 Champions Points, even without ladders.";
     } else if (remaining <= 0) {
       statusCaption.textContent =
         "No rolls remaining – speak to your manager to get more.";
@@ -271,8 +231,7 @@ async function loadState() {
 // ---- Dice animation ----
 function animateDiceRolling() {
   if (!diceEl) return;
-  // use the existing .dice.spin CSS animation
-  diceEl.classList.add("spin");
+  diceEl.classList.add("spin");        // match .dice.spin in CSS
   setTimeout(() => diceEl.classList.remove("spin"), 700);
 }
 
@@ -292,99 +251,111 @@ async function handleRoll() {
     });
 
     const data = await res.json();
-    if (!res.ok) {
-      alert(data.error || "Unable to roll right now.");
+
+    if (!res.ok || !data.success) {
+      alert(data.error || "Unable to roll.");
       return;
     }
 
-    const fromPosition = data.fromPosition;
-    const toPosition = data.position;
-    const diceValue = data.dice;
+    const {
+      dice,
+      fromPosition,
+      toPosition,
+      position,
+      rollsUsed: newRollsUsed,
+      rollsGranted: newRollsGranted,
+      completed,
+      reward
+    } = data;
 
+    // Update dice face slightly after the roll animation starts
     if (diceEl) {
       setTimeout(() => {
-        diceEl.textContent = String(diceValue);
+        diceEl.textContent = String(dice);
       }, 350);
     }
 
-    const normalEnd = Math.min(fromPosition + diceValue, FINAL_SQUARE);
-    const jumped = toPosition !== normalEnd;
-    const isSnake = jumped && toPosition < normalEnd;
-    const isLadder = jumped && toPosition > normalEnd;
-
-    currentPosition = toPosition;
-    rollsUsed = data.rollsUsed;
-    rollsGranted = data.rollsGranted;
-    currentReward = data.reward ?? null;
-    gameCompleted = !!data.completed;
-
-    await animateMove(fromPosition, normalEnd, toPosition, isSnake, isLadder);
+    currentPosition = position || 0;
+    rollsUsed = newRollsUsed || 0;
+    rollsGranted = newRollsGranted || 0;
+    currentReward = reward ?? null;
+    gameCompleted = !!completed;
     updateStatusUI();
+
+    isAnimating = true;
+
+    // Work out jumps for animation path
+    const landed = toPosition;
+    const isSnake = SNAKE_HEADS.has(landed);
+    const isLadder = LADDER_BASES.has(landed);
+
+    const finalPosition = landed;
+
+    // The board movement should always follow the dice, then do jump
+    await animateMove(fromPosition, landed, isSnake, isLadder, finalPosition);
+
+    // short delay so dice + sound feel distinct from counter movement
+    await new Promise((resolve) => setTimeout(resolve, 450));
 
     if (gameCompleted) {
       showCompletion(currentReward);
     }
+
+    isAnimating = false;
   } catch (err) {
-    console.error("Roll error:", err);
-    alert("Server error – please try again.");
+    console.error("Error on roll:", err);
+    isAnimating = false;
   }
 }
 
-rollBtn?.addEventListener("click", handleRoll);
-
-// ---- Movement animation ----
-function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) {
+// ---- Board movement animation ----
+function animateMove(fromPosition, landedPosition, isSnake, isLadder, finalPosition) {
   return new Promise((resolve) => {
-    isAnimating = true;
+    const normalEnd = Math.min(landedPosition, FINAL_SQUARE);
+    const stepCount = normalEnd - fromPosition;
+    const stepDuration = 160;
 
-    const pathSquares = [];
-    for (let p = fromPosition + 1; p <= normalEnd; p++) {
-      pathSquares.push(p);
-    }
+    let step = 0;
 
-    let index = 0;
+    moveSound.currentTime = 0;
+    moveSound.play().catch(() => {});
 
     function stepSquares() {
-      if (index >= pathSquares.length) {
-        if (finalPosition !== normalEnd) {
-          // Now perform snake / ladder animation
-          if (isSnake) {
-            animateSnakeSlide(normalEnd, finalPosition).then(endSequence);
-          } else if (isLadder) {
-            animateLadderClimb(normalEnd, finalPosition).then(endSequence);
-          } else {
-            endSequence();
-          }
-        } else {
-          endSequence();
-        }
+      if (step >= stepCount) {
+        finishNormalMove();
         return;
       }
 
-      const pos = pathSquares[index++];
-      placeCounter(pos);
-      moveSound.currentTime = 0;
-      moveSound.play().catch(() => {});
-      setTimeout(stepSquares, 260);
+      const intermediate = fromPosition + step + 1;
+      placeCounter(intermediate);
+      step++;
+
+      setTimeout(stepSquares, stepDuration);
     }
 
-    function endSequence() {
-      placeCounter(finalPosition);
-      isAnimating = false;
-      resolve();
-    }
+    function finishNormalMove() {
+      if (landedPosition > FINAL_SQUARE) {
+        placeCounter(FINAL_SQUARE);
+      }
 
-    if (pathSquares.length === 0) {
-      // landed exactly where you were (shouldn't really happen)
+      function endSequence() {
+        placeCounter(finalPosition);
+        resolve();
+      }
+
       if (isSnake) {
-        animateSnakeSlide(fromPosition, finalPosition).then(endSequence);
+        animateSnakeSlide(landedPosition, finalPosition).then(endSequence);
       } else if (isLadder) {
-        animateLadderClimb(fromPosition, finalPosition).then(endSequence);
+        animateLadderClimb(landedPosition, finalPosition).then(endSequence);
       } else {
         endSequence();
       }
-    } else {
+    }
+
+    if (stepCount > 0) {
       stepSquares();
+    } else {
+      finishNormalMove();
     }
   });
 }
@@ -401,7 +372,6 @@ function animateSnakeSlide(startPos, endPos) {
     const midX = (start.x + end.x) / 2;
     const midY = (start.y + end.y) / 2;
 
-    // Give the curve some "belly" depending on vertical direction
     const offset = (start.y < end.y ? -1 : 1) * 80;
     const ctrl = { x: midX, y: midY + offset };
 
@@ -466,27 +436,36 @@ function animateLadderClimb(startPos, endPos) {
 
 // ---- Congratulations + confetti ----
 function fireConfetti() {
-  if (typeof confetti !== "function") return;
-  // big centre burst
-  confetti({
-    particleCount: 320,
-    spread: 120,
-    startVelocity: 45,
-    origin: { y: 0.45 },
-    ticks: 240
-  });
+  if (!confettiCanvas) return;
+
+  confettiCanvas.innerHTML = "";
+  confettiCanvas.classList.add("show");
+
+  const colours = [
+    "#f97316",
+    "#22c55e",
+    "#38bdf8",
+    "#6366f1",
+    "#e11d48",
+    "#facc15",
+    "#ffffff"
+  ];
+
+  const pieces = 140;
+  for (let i = 0; i < pieces; i++) {
+    const piece = document.createElement("div");
+    piece.className = "confetti-piece";
+    piece.style.left = Math.random() * 100 + "vw";
+    piece.style.animationDelay = Math.random() * 0.7 + "s";
+    piece.style.opacity = String(0.7 + Math.random() * 0.3);
+    piece.style.backgroundColor = colours[i % colours.length];
+    confettiCanvas.appendChild(piece);
+  }
+
   setTimeout(() => {
-    confetti({
-      particleCount: 180,
-      spread: 70,
-      origin: { x: 0.2, y: 0.5 }
-    });
-    confetti({
-      particleCount: 180,
-      spread: 70,
-      origin: { x: 0.8, y: 0.5 }
-    });
-  }, 220);
+    confettiCanvas.classList.remove("show");
+    confettiCanvas.innerHTML = "";
+  }, 2200);
 }
 
 function showCompletion(reward) {
@@ -496,7 +475,6 @@ function showCompletion(reward) {
   if (!winOverlay) winOverlay = document.getElementById("winOverlay");
   if (!winMessage) winMessage = document.getElementById("winMessage");
   if (!winCloseBtn) winCloseBtn = document.getElementById("winCloseBtn");
-
   if (!winOverlay) return;
 
   if (winMessage) {
@@ -505,22 +483,13 @@ function showCompletion(reward) {
       : "You have completed the board!";
   }
 
-  // Make the congratulations card bigger + more prominent
-  const card = winOverlay.querySelector(".win-card");
-  if (card) {
-    card.style.maxWidth = "560px";
-    card.style.padding = "40px 52px";
-    card.style.transform = "scale(1.3)";
-    const heading = card.querySelector("h2");
-    const para = card.querySelector("p");
-    if (heading) heading.style.fontSize = "2.3rem";
-    if (para) para.style.fontSize = "1.05rem";
-  }
-
-  winOverlay.classList.remove("hidden");
-  winOverlay.style.display = "flex";
-
+  // big confetti first, then show the modal ~2 seconds later
   fireConfetti();
+
+  setTimeout(() => {
+    winOverlay.classList.remove("hidden");
+    winOverlay.style.display = "flex";
+  }, 2000);
 
   function closeOverlay() {
     winOverlay.style.display = "none";
@@ -548,27 +517,35 @@ function initCounterChoice() {
   const saved = parseInt(localStorage.getItem("counterTheme") || "1", 10);
   applyCounterTheme(saved);
 
-  counterChoiceButtons.forEach((btn, i) => {
-    const idx = i + 1;
-    if (idx === saved) btn.classList.add("counter-choice-active");
-
+  counterChoiceButtons.forEach((btn) => {
+    const idx = parseInt(btn.dataset.theme || "1", 10);
+    if (idx === saved) {
+      btn.classList.add("active");
+    }
     btn.addEventListener("click", () => {
-      counterChoiceButtons.forEach((b) =>
-        b.classList.remove("counter-choice-active")
-      );
-      btn.classList.add("counter-choice-active");
+      counterChoiceButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
       localStorage.setItem("counterTheme", String(idx));
       applyCounterTheme(idx);
-      placeCounter(currentPosition || 1);
     });
   });
 }
 
 // ---- Init ----
-buildBoardGrid();
-initCounterChoice();
-loadState();
+function init() {
+  buildBoardGrid();
+  initCounterChoice();
+  loadState();
+  if (rollBtn) {
+    rollBtn.addEventListener("click", handleRoll);
+  }
 
-window.addEventListener("resize", () => {
-  if (currentPosition > 0) placeCounter(currentPosition);
-});
+  window.addEventListener("resize", () => {
+    buildBoardGrid();
+    if (currentPosition > 0) {
+      placeCounter(currentPosition);
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", init);
