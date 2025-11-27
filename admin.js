@@ -1,16 +1,13 @@
 // admin.js
 // Admin portal logic for Snakes & Ladders
-// - Matches IDs in admin.html
-// - Shows and manages per-area £25 prize limit
-// - Default reward is always £10; only the number of random £25 winners varies.
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
-// ----- ELEMENTS (match admin.html) -----
+// ----- ELEMENTS -----
 const areaSelect = document.getElementById("adminArea");
 
 const playersTableBody = document.getElementById("playersTableBody");
-const playersAreaLabel = document.getElementById("playersAreaLabel");
+let playersAreaLabel = document.getElementById("playersAreaLabel");
 const selectAllCheckbox = document.getElementById("selectAllPlayers");
 const usersStatusEl = document.getElementById("usersStatus");
 
@@ -91,17 +88,12 @@ function renderPlayers(players, area) {
   playersTableBody.innerHTML = "";
 
   // Update "Players in SWx (n)" label
-  if (playersAreaLabel) {
-    playersAreaLabel.textContent = area;
-    const parent = playersAreaLabel.parentNode;
-    if (parent) {
-      // parent text is like: "Players in <span>SW1</span> (0)"
-      // We'll set the text around the span ourselves.
-      parent.innerHTML = `Players in <span id="playersAreaLabel">${area}</span> (${players.length})`;
-    }
+  const header = playersAreaLabel?.parentNode;
+  if (header) {
+    header.innerHTML = `Players in <span id="playersAreaLabel">${area}</span> (${players.length})`;
+    playersAreaLabel = document.getElementById("playersAreaLabel");
   }
 
-  // No players
   if (!Array.isArray(players) || players.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
@@ -143,7 +135,7 @@ function renderPlayers(players, area) {
     usedCell.textContent = p.rolls_used ?? 0;
     row.appendChild(usedCell);
 
-    // rolls granted (with available)
+    // rolls granted
     const grantedCell = document.createElement("td");
     const used = p.rolls_used ?? 0;
     const granted = p.rolls_granted ?? 0;
@@ -166,7 +158,7 @@ function renderPlayers(players, area) {
         : "—";
     row.appendChild(rewardCell);
 
-    // actions (reset / delete)
+    // actions
     const actionsCell = document.createElement("td");
     const resetBtn = document.createElement("button");
     resetBtn.textContent = "Reset";
@@ -185,10 +177,7 @@ function renderPlayers(players, area) {
     playersTableBody.appendChild(row);
   });
 
-  // reset "select all" checkbox
-  if (selectAllCheckbox) {
-    selectAllCheckbox.checked = false;
-  }
+  if (selectAllCheckbox) selectAllCheckbox.checked = false;
 }
 
 // ----- RESET / DELETE PLAYER -----
@@ -281,9 +270,7 @@ async function handleGrantRolls(toSelectedOnly) {
       return;
     }
 
-    showStatus(
-      `Updated rolls for ${data.affected || 0} players in ${area}.`
-    );
+    showStatus(`Updated rolls for ${data.affected || 0} players in ${area}.`);
     loadPlayersForArea();
   } catch (err) {
     console.error("Grant rolls error:", err);
@@ -325,7 +312,7 @@ async function handleUndoGrant() {
   }
 }
 
-// ----- PRIZE CONFIG (MAX £25 WINNERS PER AREA) -----
+// ----- PRIZE CONFIG -----
 async function loadPrizeConfig() {
   const area = getSelectedArea();
   if (!area || !prizeCountInput || !prizeStatusEl) return;
@@ -336,10 +323,9 @@ async function loadPrizeConfig() {
     );
 
     if (!res.ok) {
-      // No config saved yet – default is all £10
       prizeCountInput.value = "0";
       prizeStatusEl.textContent =
-        "No £25 settings saved yet. Default reward is £10 Champions Points for all winners in this area.";
+        "£25 random prizes: 0 used / 0 total (remaining: 0).";
       return;
     }
 
@@ -349,7 +335,7 @@ async function loadPrizeConfig() {
     const remaining = data.remaining25 ?? 0;
 
     prizeCountInput.value = String(winners);
-    prizeStatusEl.textContent = `£25 prizes: ${used25} used / ${winners} total (remaining: ${remaining}). Default reward is £10 Champions Points – only this many winners will be uplifted to £25 at random.`;
+    prizeStatusEl.textContent = `£25 random prizes: ${used25} used / ${winners} total (remaining: ${remaining}).`;
   } catch (err) {
     console.error("Load prize config error:", err);
     prizeStatusEl.textContent = "Error loading prize settings.";
@@ -397,29 +383,25 @@ async function savePrizeConfig() {
   }
 }
 
-// ----- SELECT ALL CHECKBOX -----
+// ----- SELECT ALL -----
 function handleSelectAllToggle() {
   if (!playersTableBody || !selectAllCheckbox) return;
   const checked = selectAllCheckbox.checked;
   const checks = playersTableBody.querySelectorAll(
     "input[type='checkbox'][data-email]"
   );
-  checks.forEach((cb) => {
-    cb.checked = checked;
-  });
+  checks.forEach((cb) => (cb.checked = checked));
 }
 
 // ----- INIT -----
 function initAdmin() {
   ensureLoggedIn();
 
-  // Area change
   areaSelect?.addEventListener("change", () => {
     loadPlayersForArea();
     loadPrizeConfig();
   });
 
-  // Grant buttons
   grantEveryoneBtn?.addEventListener("click", () =>
     handleGrantRolls(false)
   );
@@ -428,13 +410,10 @@ function initAdmin() {
   );
   undoGrantBtn?.addEventListener("click", handleUndoGrant);
 
-  // Prize save
   prizeSaveBtn?.addEventListener("click", savePrizeConfig);
 
-  // Select-all checkbox
   selectAllCheckbox?.addEventListener("change", handleSelectAllToggle);
 
-  // Initial load for default area (SW1)
   if (getSelectedArea()) {
     loadPlayersForArea();
     loadPrizeConfig();
