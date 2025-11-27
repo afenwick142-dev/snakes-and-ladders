@@ -1,345 +1,289 @@
-// admin.js
+// admin.js – Snakes & Ladders Admin
+// Works with admin.html from your project
+
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
-// --- ELEMENTS ---
+// Elements
 const areaSelect = document.getElementById("adminArea");
 const grantCountInput = document.getElementById("grantCount");
 const grantBtn = document.getElementById("grantBtn");
 const grantSelectedBtn = document.getElementById("grantSelectedBtn");
 const undoGrantBtn = document.getElementById("undoGrantBtn");
-const prizeInput = document.getElementById("prizeCount");
+
+const prizeCountInput = document.getElementById("prizeCount");
 const savePrizeBtn = document.getElementById("savePrizeBtn");
+
+const selectAllCheckbox = document.getElementById("selectAllPlayers");
 const playersTableBody = document.getElementById("playersTableBody");
-const selectAllPlayers = document.getElementById("selectAllPlayers");
-const usersStatus = document.getElementById("usersStatus");
 const playersAreaLabel = document.getElementById("playersAreaLabel");
+const usersStatus = document.getElementById("usersStatus");
 
-// --- SIMPLE AUTH GUARD ---
-if (localStorage.getItem("adminLoggedIn") !== "yes") {
-  window.location.href = "admin-login.html";
-}
-
-// --- HELPERS ---
-function normaliseArea(value) {
-  return (value || "").trim().toUpperCase();
-}
+let currentArea = areaSelect ? areaSelect.value : "SW1";
 
 function updatePlayersAreaLabel() {
-  if (!areaSelect || !playersAreaLabel) return;
-  const area = normaliseArea(areaSelect.value || "SW1");
-  playersAreaLabel.textContent = area;
+  if (playersAreaLabel) playersAreaLabel.textContent = currentArea;
 }
 
-function showStatus(msg) {
-  if (usersStatus) {
-    usersStatus.textContent = msg || "";
-  }
+// ---- helpers ----
+function getSelectedEmails() {
+  const rows = playersTableBody?.querySelectorAll("tr") || [];
+  const emails = [];
+  rows.forEach((row) => {
+    const cb = row.querySelector("input[type=checkbox]");
+    if (cb && cb.checked) {
+      const emailCell = row.querySelector("[data-col='email']");
+      if (emailCell) emails.push(emailCell.textContent.trim());
+    }
+  });
+  return emails;
 }
 
-// --- LOAD PLAYERS FOR AREA ---
+function setStatus(msg, isError = false) {
+  if (!usersStatus) return;
+  usersStatus.textContent = msg || "";
+  usersStatus.classList.toggle("status-error", !!isError);
+}
+
+// ---- Load players for area ----
 async function loadPlayers() {
-  const area = normaliseArea(areaSelect.value);
+  if (!playersTableBody) return;
+  playersTableBody.innerHTML = "";
+  setStatus("Loading players...");
 
   try {
-    const res = await fetch(`${API}/players?area=${encodeURIComponent(area)}`);
+    const res = await fetch(
+      `${API}/admin/players?area=${encodeURIComponent(currentArea)}`
+    );
     const data = await res.json();
 
-    playersTableBody.innerHTML = "";
-    updatePlayersAreaLabel();
-
     if (!res.ok) {
-      showStatus(data.error || "Error loading players.");
+      setStatus(data.error || "Failed to load players.", true);
       return;
     }
 
-    if (!Array.isArray(data) || data.length === 0) {
-      showStatus(`No players found in ${area}.`);
+    if (!Array.isArray(data.players) || data.players.length === 0) {
+      setStatus(`No players found in ${currentArea}.`);
       return;
     }
 
-    showStatus(`Loaded ${data.length} player(s) in ${area}.`);
-
-    data.forEach((player) => {
+    data.players.forEach((p) => {
       const tr = document.createElement("tr");
 
       tr.innerHTML = `
-        <td><input type="checkbox" class="player-select" data-email="${player.email}" /></td>
-        <td>${player.email}</td>
-        <td>${player.area || area}</td>
-        <td>${player.position}</td>
-        <td>${player.rolls_used}</td>
-        <td>${player.rolls_granted}</td>
-        <td>${player.completed ? "Yes" : "No"}</td>
-        <td>${player.reward ? "£" + player.reward : "-"}</td>
-        <td class="actions-cell">
-          <button class="btn-table grant-one-btn" data-email="${player.email}">Grant</button>
-          <button class="btn-table reset-btn" data-email="${player.email}">Reset</button>
-          <button class="btn-table delete-btn" data-email="${player.email}">Delete</button>
+        <td><input type="checkbox" class="row-select"></td>
+        <td data-col="email">${p.email}</td>
+        <td>${p.area}</td>
+        <td>${p.position}</td>
+        <td>${p.rollsUsed}</td>
+        <td>${p.rollsGranted}</td>
+        <td>${p.completed ? "Yes" : "No"}</td>
+        <td>${p.reward ? "£" + p.reward : "-"}</td>
+        <td class="actions">
+          <button class="btn btn-secondary btn-small action-grant">Grant</button>
+          <button class="btn btn-secondary btn-small action-reset">Reset</button>
+          <button class="btn btn-secondary btn-small action-delete">Delete</button>
         </td>
       `;
+
+      // Per-row actions
+      const [grantBtnRow, resetBtn, deleteBtn] = tr.querySelectorAll("button");
+
+      grantBtnRow.addEventListener("click", () => {
+        const amount = parseInt(grantCountInput.value || "1", 10) || 1;
+        grantToPlayer(p.email, amount);
+      });
+
+      resetBtn.addEventListener("click", () => resetPlayer(p.email));
+      deleteBtn.addEventListener("click", () => deletePlayer(p.email));
 
       playersTableBody.appendChild(tr);
     });
 
-    // Wire up row buttons
-    document.querySelectorAll(".grant-one-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const email = btn.getAttribute("data-email");
-        grantToSinglePlayer(email);
-      });
-    });
-
-    document.querySelectorAll(".reset-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const email = btn.getAttribute("data-email");
-        resetPlayer(email);
-      });
-    });
-
-    document.querySelectorAll(".delete-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const email = btn.getAttribute("data-email");
-        deletePlayer(email);
-      });
-    });
+    setStatus(`Loaded ${data.players.length} player(s) in ${currentArea}.`);
   } catch (err) {
-    console.error("Error loading players", err);
-    showStatus("Error loading players.");
+    console.error(err);
+    setStatus("Server error loading players.", true);
   }
 }
 
-// Keep label + table in sync when area changes
-areaSelect?.addEventListener("change", () => {
-  updatePlayersAreaLabel();
-  loadPlayers();
-});
-updatePlayersAreaLabel();
-loadPlayers();
-
-// Select / deselect all players
-selectAllPlayers?.addEventListener("change", () => {
-  const checked = selectAllPlayers.checked;
-  document
-    .querySelectorAll(".player-select")
-    .forEach((cb) => (cb.checked = checked));
-});
-
-// --- GRANT ROLLS TO AREA ---
-grantBtn?.addEventListener("click", async () => {
-  const area = normaliseArea(areaSelect.value);
-  const count = parseInt(grantCountInput.value, 10);
-
-  if (!Number.isInteger(count) || count === 0) {
-    alert("Enter roll amount (non-zero whole number).");
+// ---- Admin actions ----
+async function grantToArea() {
+  const amount = parseInt(grantCountInput.value || "1", 10);
+  if (!amount || amount <= 0) {
+    alert("Enter a positive number of rolls to grant.");
     return;
   }
 
   try {
-    const res = await fetch(`${API}/grant-rolls`, {
+    const res = await fetch(`${API}/admin/grant-area`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area, count }),
+      body: JSON.stringify({ area: currentArea, rolls: amount })
     });
-
     const data = await res.json();
-
     if (!res.ok) {
-      alert(data.error || "Failed granting rolls.");
+      alert(data.error || "Failed to grant rolls to area.");
       return;
     }
-
-    alert(`Granted ${count} roll(s) to all players in ${area}.`);
-    loadPlayers();
+    alert(`Granted ${amount} roll(s) to all players in ${currentArea}.`);
+    await loadPlayers();
   } catch (err) {
-    console.error("Grant rolls error", err);
-    alert("Server error.");
-  }
-});
-
-// --- GRANT ROLLS TO SELECTED PLAYERS ---
-grantSelectedBtn?.addEventListener("click", async () => {
-  const area = normaliseArea(areaSelect.value);
-  const count = parseInt(grantCountInput.value, 10);
-
-  if (!Number.isInteger(count) || count === 0) {
-    alert("Enter roll amount (non-zero whole number).");
-    return;
-  }
-
-  const selectedEmails = Array.from(
-    document.querySelectorAll(".player-select:checked")
-  ).map((cb) => cb.getAttribute("data-email"));
-
-  if (selectedEmails.length === 0) {
-    alert("Select at least one player.");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API}/grant-rolls`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area, count, emails: selectedEmails }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Failed granting rolls to selected players.");
-      return;
-    }
-
-    alert(
-      `Granted ${count} roll(s) to ${selectedEmails.length} selected player(s) in ${area}.`
-    );
-    loadPlayers();
-  } catch (err) {
-    console.error("Grant selected rolls error", err);
-    alert("Server error.");
-  }
-});
-
-// Grant to a single player (row button)
-async function grantToSinglePlayer(email) {
-  const area = normaliseArea(areaSelect.value);
-  const input = prompt(
-    `Grant how many extra rolls to ${email}? (use a positive whole number)`
-  );
-  if (input === null) return;
-
-  const count = parseInt(input, 10);
-  if (!Number.isInteger(count) || count <= 0) {
-    alert("Please enter a positive whole number.");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API}/grant-rolls`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area, count, emails: [email] }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Failed granting rolls.");
-      return;
-    }
-
-    alert(`Granted ${count} roll(s) to ${email} in ${area}.`);
-    loadPlayers();
-  } catch (err) {
-    console.error("Grant single player error", err);
+    console.error(err);
     alert("Server error.");
   }
 }
 
-// --- UNDO LAST GRANT (per-area) ---
-undoGrantBtn?.addEventListener("click", async () => {
-  const area = normaliseArea(areaSelect.value);
+async function grantToSelected() {
+  const amount = parseInt(grantCountInput.value || "1", 10);
+  if (!amount || amount <= 0) {
+    alert("Enter a positive number of rolls to grant.");
+    return;
+  }
 
-  if (
-    !confirm(
-      `Undo the last grant of rolls recorded for ${area}? (This will reverse only the most recent grant for this area.)`
-    )
-  ) {
+  const emails = getSelectedEmails();
+  if (emails.length === 0) {
+    alert("Select at least one player to grant rolls.");
     return;
   }
 
   try {
-    const res = await fetch(`${API}/grant-rolls/undo`, {
+    const res = await fetch(`${API}/admin/grant-selected`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area }),
+      body: JSON.stringify({ area: currentArea, rolls: amount, emails })
     });
-
     const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Failed to grant rolls to selected players.");
+      return;
+    }
+    alert(`Granted ${amount} roll(s) to ${emails.length} player(s).`);
+    await loadPlayers();
+  } catch (err) {
+    console.error(err);
+    alert("Server error.");
+  }
+}
 
+async function grantToPlayer(email) {
+  const amount = parseInt(grantCountInput.value || "1", 10);
+  if (!amount || amount <= 0) {
+    alert("Enter a positive number of rolls to grant.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/admin/grant-player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area: currentArea, email, rolls: amount })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Failed to grant rolls.");
+      return;
+    }
+    await loadPlayers();
+  } catch (err) {
+    console.error(err);
+    alert("Server error.");
+  }
+}
+
+async function undoLastGrant() {
+  try {
+    const res = await fetch(`${API}/admin/undo-last-grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area: currentArea })
+    });
+    const data = await res.json();
     if (!res.ok) {
       alert(data.error || "Failed to undo last grant.");
       return;
     }
-
-    alert("Last grant has been undone for " + area + ".");
-    loadPlayers();
+    alert(data.message || "Last grant undone.");
+    await loadPlayers();
   } catch (err) {
-    console.error("Undo grant error", err);
+    console.error(err);
     alert("Server error.");
   }
-});
+}
 
-// --- RESET PLAYER ---
 async function resetPlayer(email) {
-  const area = normaliseArea(areaSelect.value);
-
-  if (
-    !confirm(
-      `Reset progress for ${email} in ${area}? Position, rolls and reward will be cleared.`
-    )
-  ) {
-    return;
-  }
+  if (!confirm(`Reset progress for ${email}?`)) return;
 
   try {
-    const res = await fetch(`${API}/player/reset`, {
+    const res = await fetch(`${API}/admin/reset-player`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
+      body: JSON.stringify({ area: currentArea, email })
     });
-
     const data = await res.json();
-
     if (!res.ok) {
       alert(data.error || "Failed to reset player.");
       return;
     }
-
-    alert(`Player ${email} has been reset.`);
-    loadPlayers();
+    await loadPlayers();
   } catch (err) {
-    console.error("Reset player error", err);
+    console.error(err);
     alert("Server error.");
   }
 }
 
-// --- DELETE PLAYER ---
 async function deletePlayer(email) {
-  const area = normaliseArea(areaSelect.value);
-
-  if (!confirm(`Delete ${email} from ${area}? This cannot be undone.`)) {
-    return;
-  }
+  if (!confirm(`Delete player ${email}? This cannot be undone.`)) return;
 
   try {
-    const res = await fetch(`${API}/player/delete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
-    });
-
+    const res = await fetch(
+      `${API}/admin/player?area=${encodeURIComponent(
+        currentArea
+      )}&email=${encodeURIComponent(email)}`,
+      { method: "DELETE" }
+    );
     const data = await res.json();
-
     if (!res.ok) {
       alert(data.error || "Failed to delete player.");
       return;
     }
-
-    alert(`Player ${email} has been deleted.`);
-    loadPlayers();
+    await loadPlayers();
   } catch (err) {
-    console.error("Delete player error", err);
+    console.error(err);
     alert("Server error.");
   }
 }
 
-// --- PRIZE SETTINGS ---
-savePrizeBtn?.addEventListener("click", async () => {
-  const area = normaliseArea(areaSelect.value);
-  const maxWinners = parseInt(prizeInput.value, 10);
+// ---- Prize settings (max £25 per area) ----
+async function loadPrizeSettings() {
+  if (!prizeCountInput) return;
 
-  if (!Number.isInteger(maxWinners) || maxWinners < 0) {
-    alert("Enter a valid non-negative number for max £25 winners.");
+  try {
+    const res = await fetch(
+      `${API}/area/prize?area=${encodeURIComponent(currentArea)}`
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.error || "Failed to load prize settings.", true);
+      return;
+    }
+
+    prizeCountInput.value =
+      typeof data.max25 === "number" ? String(data.max25) : "";
+    if (data.max25 != null) {
+      setStatus(
+        `£25 remaining in ${currentArea}: ${data.remaining25} of ${data.max25}.`
+      );
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus("Server error loading prize settings.", true);
+  }
+}
+
+async function savePrizeSettings() {
+  const max25 = parseInt(prizeCountInput.value || "0", 10);
+  if (max25 < 0) {
+    alert("Max £25 winners cannot be negative.");
     return;
   }
 
@@ -347,19 +291,45 @@ savePrizeBtn?.addEventListener("click", async () => {
     const res = await fetch(`${API}/area/prize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area, count: maxWinners }),
+      body: JSON.stringify({ area: currentArea, max25 })
     });
-
     const data = await res.json();
-
     if (!res.ok) {
       alert(data.error || "Failed saving prize settings.");
       return;
     }
 
-    alert("Prize settings saved for " + area + ".");
+    alert("Prize settings saved.");
+    await loadPrizeSettings();
   } catch (err) {
-    console.error("Prize settings error", err);
+    console.error(err);
     alert("Server error.");
   }
+}
+
+// ---- events ----
+areaSelect?.addEventListener("change", () => {
+  currentArea = areaSelect.value || "SW1";
+  updatePlayersAreaLabel();
+  loadPlayers();
+  loadPrizeSettings();
 });
+
+grantBtn?.addEventListener("click", grantToArea);
+grantSelectedBtn?.addEventListener("click", grantToSelected);
+undoGrantBtn?.addEventListener("click", undoLastGrant);
+savePrizeBtn?.addEventListener("click", savePrizeSettings);
+
+selectAllCheckbox?.addEventListener("change", () => {
+  const rows = playersTableBody?.querySelectorAll("tr") || [];
+  rows.forEach((row) => {
+    const cb = row.querySelector("input[type=checkbox]");
+    if (cb) cb.checked = selectAllCheckbox.checked;
+  });
+});
+
+// ---- init ----
+currentArea = areaSelect ? areaSelect.value || "SW1" : "SW1";
+updatePlayersAreaLabel();
+loadPlayers();
+loadPrizeSettings();
