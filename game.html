@@ -25,21 +25,32 @@
   </header>
 
   <main class="main-wrapper main-game-layout">
-    <!-- LEFT: Board -->
+    <!-- LEFT: Board + Counter Style -->
     <section class="card card-board">
       <h2 class="card-title">Game Board</h2>
-      <p class="subtitle">
-        Reach square 30 in six rolls or less. Watch out for the snakes, aim for the ladders.
-      </p>
 
       <div class="board-container">
         <div id="boardGrid" class="board-grid"></div>
         <!-- Main playing counter -->
         <div id="counter" class="counter hidden"></div>
       </div>
+
+      <!-- Counter style UNDER the board -->
+      <section class="counter-style-section">
+        <h3>Counter Style</h3>
+        <p class="helper-text">Pick your playing piece.</p>
+        <div class="counter-choices">
+          <button class="counter-choice counter-choice-1" data-theme="1" data-counter-theme-index="0">1</button>
+          <button class="counter-choice counter-choice-2" data-theme="2" data-counter-theme-index="1">2</button>
+          <button class="counter-choice counter-choice-3" data-theme="3" data-counter-theme-index="2">3</button>
+          <button class="counter-choice counter-choice-4" data-theme="4" data-counter-theme-index="3">4</button>
+          <button class="counter-choice counter-choice-5" data-theme="5" data-counter-theme-index="4">5</button>
+          <button class="counter-choice counter-choice-6" data-theme="6" data-counter-theme-index="5">6</button>
+        </div>
+      </section>
     </section>
 
-    <!-- RIGHT: Panels -->
+    <!-- RIGHT: Dice + Status -->
     <aside class="side-panel">
       <section class="card">
         <h3>Dice</h3>
@@ -52,8 +63,7 @@
       <section class="card">
         <h3>Game Progress</h3>
         <p class="helper-text">
-          You have <strong>up to six rolls</strong> to reach square 30.
-          Admins may grant extra rolls for your SW area.
+          You start with up to six rolls to reach square 30. Admins may grant extra rolls for your SW area.
         </p>
         <ul class="progress-list">
           <li><span>Current square:</span> <span id="statusPosition">0</span></li>
@@ -61,19 +71,6 @@
           <li><span>Rolls granted:</span> <span id="statusRollsGranted">0</span></li>
           <li><span>Potential reward:</span> <span id="statusReward">—</span></li>
         </ul>
-      </section>
-
-      <section class="card">
-        <h3>Counter Style</h3>
-        <p>Pick your playing piece.</p>
-        <div class="counter-choices">
-          <button class="counter-choice counter-choice-1" data-theme="1" data-counter-theme-index="0">1</button>
-          <button class="counter-choice counter-choice-2" data-theme="2" data-counter-theme-index="1">2</button>
-          <button class="counter-choice counter-choice-3" data-theme="3" data-counter-theme-index="2">3</button>
-          <button class="counter-choice counter-choice-4" data-theme="4" data-counter-theme-index="3">4</button>
-          <button class="counter-choice counter-choice-5" data-theme="5" data-counter-theme-index="4">5</button>
-          <button class="counter-choice counter-choice-6" data-theme="6" data-counter-theme-index="5">6</button>
-        </div>
       </section>
 
       <section class="card status-card">
