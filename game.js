@@ -1,42 +1,25 @@
-// game.js – Snakes & Ladders front-end
-// - Uses backend API for state & rolls
-// - Shows logged-in user in header
-// - Animates counter over a 5x6 board
-// - 6-roll rule is enforced by the backend: we only animate what the dice say
-// - Dice has a simple “rolling” animation (CSS class)
-// - Congratulations modal is made bigger, wired so Close always works
-// - Confetti fires if canvas-confetti is present
+// game.js
+// Front-end logic for Snakes & Ladders
+// - Works with existing game.html + style.css from your project
+// - Uses backend at /player/* and /area/*
+// - Animates piece across the board
+// - S1: snakes slide along a curved path
+// - L1: ladders climb vertically
+// - Shows big congratulations modal + confetti
+// - Dice shows a rolling animation, then the final face
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
-/* ----------------------------------------------------
-   DOM references (with some fallbacks)
----------------------------------------------------- */
-const userInfoEl =
-  document.getElementById("userInfo") || document.getElementById("playerName");
+// ---- DOM references ----
+const userInfoEl = document.getElementById("userInfo");
+const logoutBtn = document.getElementById("btnLogout");
 
-const logoutBtn =
-  document.getElementById("btnLogout") ||
-  document.getElementById("logout") ||
-  document.querySelector("[data-role='logout']");
+let boardGridEl = document.getElementById("boardGrid");
+let counterEl = document.getElementById("counter");
 
-// Board overlay grid and counter
-let boardGridEl =
-  document.getElementById("boardGrid") ||
-  document.querySelector(".board-grid") ||
-  document.querySelector(".board-overlay");
+const diceEl = document.getElementById("dice");
+const rollBtn = document.getElementById("btnRoll");
 
-let counterEl =
-  document.getElementById("counter") ||
-  document.querySelector(".counter") ||
-  document.querySelector(".board-counter");
-
-// Dice & roll button
-const diceEl =
-  document.getElementById("dice") || document.getElementById("diceValue");
-const rollBtn = document.getElementById("btnRoll") || document.getElementById("rollBtn");
-
-// Status fields
 const statusPosition = document.getElementById("statusPosition");
 const statusRollsUsed = document.getElementById("statusRollsUsed");
 const statusRollsGranted = document.getElementById("statusRollsGranted");
@@ -48,28 +31,30 @@ const statusRollsGrantedText = document.getElementById("statusRollsGrantedText")
 const statusRewardText = document.getElementById("statusRewardText");
 const statusCaption = document.getElementById("statusCaption");
 
-// Win overlay + message
+// counter style choices
+const counterChoiceButtons = document.querySelectorAll(".counter-choice");
+
+// confetti canvas – this class already exists in your HTML
+const confettiCanvas = document.getElementById("confetti");
+
+// winner overlay
 let winOverlay = document.getElementById("winOverlay");
 let winMessage = document.getElementById("winMessage");
 let winCloseBtn = document.getElementById("winCloseBtn");
 
-// Counter style options
-const counterChoiceButtons = document.querySelectorAll(".counter-choice");
-
-// Sounds
+// ---- sounds (optional, fail-safe if files missing) ----
 const moveSound = new Audio("move.mp3");
 const snakeSound = new Audio("snake.mp3");
 const ladderSound = new Audio("ladder.mp3");
 const winSound = new Audio("win.mp3");
 const diceSound = new Audio("dice.mp3");
 
-/* ----------------------------------------------------
-   Player context (localStorage)
----------------------------------------------------- */
+// ---- Player session ----
 let email = localStorage.getItem("playerEmail");
 let area = localStorage.getItem("playerArea");
 
 if (!email || !area) {
+  // Not logged in properly
   window.location.href = "index.html";
 }
 
@@ -84,54 +69,61 @@ logoutBtn?.addEventListener("click", () => {
   window.location.href = "index.html";
 });
 
-/* ----------------------------------------------------
-   Board layout
----------------------------------------------------- */
+// ---- Board constants ----
 const ROWS = 5;
 const COLS = 6;
 const FINAL_SQUARE = 30;
+
+// ladders and snakes as agreed
+const JUMPS = {
+  3: 22,
+  5: 8,
+  11: 26,
+  20: 29,
+  17: 4,
+  19: 7,
+  27: 1
+};
+
+const SNAKE_HEADS = new Set([17, 19, 27]);
+const LADDER_BASES = new Set([3, 5, 11, 20]);
+
+// map from position -> cell element
 const cellsByPosition = {};
 
+// ---- Ensure overlay + counter exist ----
 function ensureOverlayAndCounter() {
-  // Make sure we have an overlay grid to position 30 cells on
   if (!boardGridEl) {
-    const boardImg =
-      document.querySelector(".board img, .board-image, .game-board img") ||
-      document.querySelector("img");
-    const wrapper = boardImg ? boardImg.parentElement : document.body;
+    const boardContainer =
+      document.querySelector(".board-container") ||
+      document.querySelector(".card-board") ||
+      document.body;
 
     boardGridEl = document.createElement("div");
     boardGridEl.id = "boardGrid";
+    boardGridEl.className = "board-grid";
     Object.assign(boardGridEl.style, {
       position: "relative",
       width: "100%",
-      height: boardImg ? `${boardImg.clientHeight}px` : "560px",
-      margin: "0",
+      height: "100%"
     });
-    wrapper && wrapper.appendChild(boardGridEl);
+
+    boardContainer.appendChild(boardGridEl);
   }
 
-  // Make sure a counter exists
   if (!counterEl) {
     counterEl = document.createElement("div");
     counterEl.id = "counter";
-    Object.assign(counterEl.style, {
-      position: "absolute",
-      width: "36px",
-      height: "36px",
-      borderRadius: "50%",
-      boxShadow: "0 6px 16px rgba(0,0,0,0.35)",
-      transform: "translate(-50%, -50%)",
-      zIndex: "5",
-      pointerEvents: "none",
-      background:
-        "radial-gradient(circle at 30% 30%, rgba(255,255,255,.85), rgba(255,255,255,.4) 35%, rgba(0,0,0,.15) 70%), linear-gradient(135deg,#6D28D9,#A855F7)",
-      border: "2px solid rgba(255,255,255,.6)",
-    });
+    counterEl.className = "counter";
     boardGridEl.appendChild(counterEl);
   }
+
+  // make sure it's above the board image
+  counterEl.style.position = "absolute";
+  counterEl.style.zIndex = "10";
 }
 
+// ---- Build logical 5x6 grid overlay ----
 function buildBoardGrid() {
   ensureOverlayAndCounter();
 
@@ -153,9 +145,10 @@ function buildBoardGrid() {
   const cellH = rect.height / ROWS;
 
   let pos = 1;
+
   for (let rFromBottom = 0; rFromBottom < ROWS; rFromBottom++) {
-    const realRowIndex = ROWS - 1 - rFromBottom;
-    const leftToRight = rFromBottom % 2 === 0; // bottom row L->R, next R->L, etc.
+    const realRowIndex = ROWS - 1 - rFromBottom; // top->bottom index
+    const leftToRight = rFromBottom % 2 === 0;   // 1st,3rd,5th rows L→R
 
     for (let col = 0; col < COLS; col++) {
       const visualCol = leftToRight ? col : COLS - 1 - col;
@@ -167,7 +160,7 @@ function buildBoardGrid() {
         left: `${x}px`,
         top: `${y}px`,
         width: `${cellW}px`,
-        height: `${cellH}px`,
+        height: `${cellH}px`
       });
 
       cellsByPosition[pos] = cell;
@@ -177,15 +170,10 @@ function buildBoardGrid() {
   }
 }
 
-function placeCounter(position) {
-  if (!counterEl || !boardGridEl) return;
+// helper to get cell centre in grid coordinates
+function getCellCenter(position) {
   const cell = cellsByPosition[position];
-  if (!cell) {
-    counterEl.style.display = "none";
-    return;
-  }
-
-  counterEl.style.display = "block";
+  if (!cell || !boardGridEl) return { x: 0, y: 0 };
 
   const gridRect = boardGridEl.getBoundingClientRect();
   const cellRect = cell.getBoundingClientRect();
@@ -193,12 +181,18 @@ function placeCounter(position) {
   const x = cellRect.left + cellRect.width / 2 - gridRect.left;
   const y = cellRect.top + cellRect.height / 2 - gridRect.top;
 
-  counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  return { x, y };
 }
 
-/* ----------------------------------------------------
-   State and status UI
----------------------------------------------------- */
+function placeCounter(position) {
+  if (!counterEl || !boardGridEl) return;
+
+  const { x, y } = getCellCenter(position);
+  counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  counterEl.classList.remove("hidden");
+}
+
+// ---- State ----
 let currentPosition = 0;
 let rollsUsed = 0;
 let rollsGranted = 0;
@@ -206,6 +200,7 @@ let currentReward = null;
 let gameCompleted = false;
 let isAnimating = false;
 
+// ---- Status UI ----
 function updateStatusUI() {
   const remaining = Math.max(0, rollsGranted - rollsUsed);
 
@@ -238,9 +233,7 @@ function updateStatusUI() {
   }
 }
 
-/* ----------------------------------------------------
-   Load state from backend
----------------------------------------------------- */
+// ---- Load state from backend ----
 async function loadState() {
   try {
     const res = await fetch(
@@ -263,7 +256,9 @@ async function loadState() {
     gameCompleted = !!data.completed;
 
     updateStatusUI();
-    placeCounter(currentPosition);
+    if (currentPosition > 0) {
+      placeCounter(currentPosition);
+    }
 
     if (gameCompleted) {
       showCompletion(currentReward);
@@ -273,19 +268,14 @@ async function loadState() {
   }
 }
 
-/* ----------------------------------------------------
-   Dice animation (CSS-based)
----------------------------------------------------- */
+// ---- Dice animation ----
 function animateDiceRolling() {
   if (!diceEl) return;
   diceEl.classList.add("rolling");
-  // Let CSS handle animation; remove class after 700ms
   setTimeout(() => diceEl.classList.remove("rolling"), 700);
 }
 
-/* ----------------------------------------------------
-   Roll handler – backend decides dice and 6-roll guarantee
----------------------------------------------------- */
+// ---- Roll button handler ----
 async function handleRoll() {
   if (isAnimating || gameCompleted) return;
 
@@ -297,11 +287,10 @@ async function handleRoll() {
     const res = await fetch(`${API}/player/roll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
+      body: JSON.stringify({ email, area })
     });
 
     const data = await res.json();
-
     if (!res.ok) {
       alert(data.error || "Unable to roll right now.");
       return;
@@ -311,20 +300,18 @@ async function handleRoll() {
     const toPosition = data.position;
     const diceValue = data.dice;
 
-    // We show the actual dice result from the server
     if (diceEl) {
       setTimeout(() => {
         diceEl.textContent = String(diceValue);
       }, 350);
     }
 
-    // Work out if this roll used a snake / ladder
     const normalEnd = Math.min(fromPosition + diceValue, FINAL_SQUARE);
     const jumped = toPosition !== normalEnd;
-    const isLadder = jumped && toPosition > normalEnd;
     const isSnake = jumped && toPosition < normalEnd;
+    const isLadder = jumped && toPosition > normalEnd;
 
-    currentPosition = data.position;
+    currentPosition = toPosition;
     rollsUsed = data.rollsUsed;
     rollsGranted = data.rollsGranted;
     currentReward = data.reward ?? null;
@@ -344,165 +331,160 @@ async function handleRoll() {
 
 rollBtn?.addEventListener("click", handleRoll);
 
-/* ----------------------------------------------------
-   Movement animation
----------------------------------------------------- */
+// ---- Movement animation ----
 function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) {
   return new Promise((resolve) => {
     isAnimating = true;
 
-    const path = [];
+    const pathSquares = [];
     for (let p = fromPosition + 1; p <= normalEnd; p++) {
-      path.push({ pos: p, type: "move" });
-    }
-    if (finalPosition !== normalEnd) {
-      path.push({
-        pos: finalPosition,
-        type: isSnake ? "snake" : isLadder ? "ladder" : "move",
-      });
-    }
-
-    if (path.length === 0) {
-      isAnimating = false;
-      resolve();
-      return;
+      pathSquares.push(p);
     }
 
     let index = 0;
 
-    (function step() {
-      const stepData = path[index];
-      placeCounter(stepData.pos);
-
-      if (stepData.type === "snake") {
-        snakeSound.currentTime = 0;
-        snakeSound.play().catch(() => {});
-      } else if (stepData.type === "ladder") {
-        ladderSound.currentTime = 0;
-        ladderSound.play().catch(() => {});
-      } else {
-        moveSound.currentTime = 0;
-        moveSound.play().catch(() => {});
+    function stepSquares() {
+      if (index >= pathSquares.length) {
+        if (finalPosition !== normalEnd) {
+          // Now perform snake / ladder animation
+          if (isSnake) {
+            animateSnakeSlide(normalEnd, finalPosition).then(endSequence);
+          } else if (isLadder) {
+            animateLadderClimb(normalEnd, finalPosition).then(endSequence);
+          } else {
+            endSequence();
+          }
+        } else {
+          endSequence();
+        }
+        return;
       }
 
-      index++;
-      if (index < path.length) {
-        setTimeout(step, stepData.type === "move" ? 340 : 600);
+      const pos = pathSquares[index++];
+      placeCounter(pos);
+      moveSound.currentTime = 0;
+      moveSound.play().catch(() => {});
+      setTimeout(stepSquares, 260);
+    }
+
+    function endSequence() {
+      placeCounter(finalPosition);
+      isAnimating = false;
+      resolve();
+    }
+
+    if (pathSquares.length === 0) {
+      // landed exactly where you were (shouldn't really happen)
+      if (isSnake) {
+        animateSnakeSlide(fromPosition, finalPosition).then(endSequence);
+      } else if (isLadder) {
+        animateLadderClimb(fromPosition, finalPosition).then(endSequence);
       } else {
-        isAnimating = false;
+        endSequence();
+      }
+    } else {
+      stepSquares();
+    }
+  });
+}
+
+// ---- S1: curved snake slide ----
+function animateSnakeSlide(startPos, endPos) {
+  return new Promise((resolve) => {
+    snakeSound.currentTime = 0;
+    snakeSound.play().catch(() => {});
+
+    const start = getCellCenter(startPos);
+    const end = getCellCenter(endPos);
+
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+
+    // Give the curve some "belly" depending on vertical direction
+    const offset = (start.y < end.y ? -1 : 1) * 80;
+    const ctrl = { x: midX, y: midY + offset };
+
+    const duration = 800;
+    const startTime = performance.now();
+
+    function frame(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const inv = 1 - t;
+
+      const x =
+        inv * inv * start.x +
+        2 * inv * t * ctrl.x +
+        t * t * end.x;
+
+      const y =
+        inv * inv * start.y +
+        2 * inv * t * ctrl.y +
+        t * t * end.y;
+
+      counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
         resolve();
       }
-    })();
+    }
+
+    requestAnimationFrame(frame);
   });
 }
 
-/* ----------------------------------------------------
-   Congratulations overlay + confetti + Close wiring
----------------------------------------------------- */
-function ensureWinOverlay() {
-  if (winOverlay) return;
+// ---- L1: ladder climb (straight line) ----
+function animateLadderClimb(startPos, endPos) {
+  return new Promise((resolve) => {
+    ladderSound.currentTime = 0;
+    ladderSound.play().catch(() => {});
 
-  // If your HTML already has a nice modal, this will never run.
-  winOverlay = document.createElement("div");
-  winOverlay.id = "winOverlay";
-  Object.assign(winOverlay.style, {
-    position: "fixed",
-    inset: "0",
-    background: "rgba(10,13,24,0.6)",
-    display: "none",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: "9999",
-    backdropFilter: "blur(2px)",
-  });
+    const start = getCellCenter(startPos);
+    const end = getCellCenter(endPos);
+    const duration = 700;
+    const startTime = performance.now();
 
-  const card = document.createElement("div");
-  card.className = "win-modal";
-  Object.assign(card.style, {
-    background: "linear-gradient(180deg,#15223b,#0f1a34)",
-    color: "white",
-    borderRadius: "24px",
-    padding: "32px 38px",
-    width: "min(90vw, 560px)",
-    boxShadow: "0 24px 64px rgba(0,0,0,.55)",
-    textAlign: "center",
-  });
+    function frame(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const x = start.x + (end.x - start.x) * t;
+      const y = start.y + (end.y - start.y) * t;
 
-  const heading = document.createElement("h2");
-  heading.textContent = "Congratulations!";
-  Object.assign(heading.style, { fontSize: "32px", margin: "0 0 10px" });
+      counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
 
-  winMessage = document.createElement("div");
-  winMessage.id = "winMessage";
-  Object.assign(winMessage.style, {
-    fontSize: "20px",
-    opacity: ".95",
-    marginBottom: "18px",
-  });
-  winMessage.textContent = "You have completed the board!";
-
-  winCloseBtn = document.createElement("button");
-  winCloseBtn.id = "winCloseBtn";
-  winCloseBtn.textContent = "Close";
-  Object.assign(winCloseBtn.style, {
-    fontSize: "18px",
-    padding: "10px 20px",
-    borderRadius: "12px",
-    border: 0,
-    background: "#7C3AED",
-    color: "#fff",
-    cursor: "pointer",
-    boxShadow: "0 10px 24px rgba(124,58,237,.35)",
-  });
-
-  card.appendChild(heading);
-  card.appendChild(winMessage);
-  card.appendChild(winCloseBtn);
-  winOverlay.appendChild(card);
-  document.body.appendChild(winOverlay);
-}
-
-function wireWinCloseHandlers() {
-  winOverlay = document.getElementById("winOverlay") || winOverlay;
-  if (!winOverlay) return;
-
-  // Find all possible “Close” buttons inside the overlay
-  const buttons = Array.from(
-    winOverlay.querySelectorAll("button, .btn-close, .close-button")
-  );
-  buttons.forEach((btn) => {
-    if (btn.dataset.winCloseWired) return;
-    btn.dataset.winCloseWired = "1";
-    btn.addEventListener("click", () => {
-      winOverlay.classList.add("hidden");
-      winOverlay.style.display = "none";
-    });
-  });
-
-  // Click on dark backdrop closes as well
-  if (!winOverlay.dataset.backdropWired) {
-    winOverlay.dataset.backdropWired = "1";
-    winOverlay.addEventListener("click", (e) => {
-      if (e.target === winOverlay) {
-        winOverlay.classList.add("hidden");
-        winOverlay.style.display = "none";
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        resolve();
       }
-    });
-  }
+    }
+
+    requestAnimationFrame(frame);
+  });
 }
 
+// ---- Congratulations + confetti ----
 function fireConfetti() {
   if (typeof confetti !== "function") return;
+  // big centre burst
   confetti({
     particleCount: 320,
     spread: 120,
     startVelocity: 45,
     origin: { y: 0.45 },
-    ticks: 240,
+    ticks: 240
   });
   setTimeout(() => {
-    confetti({ particleCount: 180, spread: 70, origin: { x: 0.2, y: 0.5 } });
-    confetti({ particleCount: 180, spread: 70, origin: { x: 0.8, y: 0.5 } });
+    confetti({
+      particleCount: 180,
+      spread: 70,
+      origin: { x: 0.2, y: 0.5 }
+    });
+    confetti({
+      particleCount: 180,
+      spread: 70,
+      origin: { x: 0.8, y: 0.5 }
+    });
   }, 220);
 }
 
@@ -510,27 +492,35 @@ function showCompletion(reward) {
   winSound.currentTime = 0;
   winSound.play().catch(() => {});
 
-  ensureWinOverlay();
-  wireWinCloseHandlers();
-  fireConfetti();
+  if (!winOverlay) winOverlay = document.getElementById("winOverlay");
+  if (!winMessage) winMessage = document.getElementById("winMessage");
+  if (!winCloseBtn) winCloseBtn = document.getElementById("winCloseBtn");
+
+  if (!winOverlay) return;
 
   if (winMessage) {
     winMessage.textContent = reward
       ? `You have earned £${reward} Champions Points!`
       : "You have completed the board!";
-    winMessage.style.fontSize = "22px";
   }
 
-  winOverlay = document.getElementById("winOverlay") || winOverlay;
-  if (winOverlay) {
-    winOverlay.classList.remove("hidden");
-    winOverlay.style.display = "flex";
+  winOverlay.classList.remove("hidden");
+  winOverlay.style.display = "flex";
+
+  fireConfetti();
+
+  function closeOverlay() {
+    winOverlay.style.display = "none";
+    winOverlay.classList.add("hidden");
   }
+
+  winCloseBtn?.addEventListener("click", closeOverlay);
+  winOverlay.addEventListener("click", (e) => {
+    if (e.target === winOverlay) closeOverlay();
+  });
 }
 
-/* ----------------------------------------------------
-   Counter style selection
----------------------------------------------------- */
+// ---- Counter style selection ----
 function applyCounterTheme(index) {
   if (!counterEl) return;
   for (let i = 1; i <= 6; i++) {
@@ -548,6 +538,7 @@ function initCounterChoice() {
   counterChoiceButtons.forEach((btn, i) => {
     const idx = i + 1;
     if (idx === saved) btn.classList.add("counter-choice-active");
+
     btn.addEventListener("click", () => {
       counterChoiceButtons.forEach((b) =>
         b.classList.remove("counter-choice-active")
@@ -555,18 +546,16 @@ function initCounterChoice() {
       btn.classList.add("counter-choice-active");
       localStorage.setItem("counterTheme", String(idx));
       applyCounterTheme(idx);
-      placeCounter(currentPosition);
+      placeCounter(currentPosition || 1);
     });
   });
 }
 
-/* ----------------------------------------------------
-   Init
----------------------------------------------------- */
+// ---- Init ----
 buildBoardGrid();
 initCounterChoice();
 loadState();
 
 window.addEventListener("resize", () => {
-  placeCounter(currentPosition);
+  if (currentPosition > 0) placeCounter(currentPosition);
 });
