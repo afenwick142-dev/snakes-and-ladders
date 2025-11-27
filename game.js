@@ -1,5 +1,12 @@
 // game.js
 // Front-end logic for Snakes & Ladders
+// - Works with existing game.html + style.css
+// - Uses backend at /player/* and /area/*
+// - Animates piece across the board
+// - S1: snakes slide along a curved path
+// - L1: ladders climb vertically
+// - Shows big congratulations modal + confetti
+// - Dice shows a rolling animation, then the final face
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
@@ -27,8 +34,8 @@ const statusCaption = document.getElementById("statusCaption");
 // counter style choices
 const counterChoiceButtons = document.querySelectorAll(".counter-choice");
 
-// confetti overlay container (DOM-based confetti)
-const confettiContainer = document.getElementById("confetti");
+// confetti canvas – this class already exists in your HTML
+const confettiCanvas = document.getElementById("confetti");
 
 // winner overlay
 let winOverlay = document.getElementById("winOverlay");
@@ -47,6 +54,7 @@ let email = localStorage.getItem("playerEmail");
 let area = localStorage.getItem("playerArea");
 
 if (!email || !area) {
+  // Not logged in properly
   window.location.href = "index.html";
 }
 
@@ -66,7 +74,7 @@ const ROWS = 5;
 const COLS = 6;
 const FINAL_SQUARE = 30;
 
-// ladders and snakes
+// ladders and snakes as agreed
 const JUMPS = {
   3: 22,
   5: 8,
@@ -74,7 +82,7 @@ const JUMPS = {
   20: 29,
   17: 4,
   19: 7,
-  27: 1,
+  27: 1
 };
 
 const SNAKE_HEADS = new Set([17, 19, 27]);
@@ -97,7 +105,7 @@ function ensureOverlayAndCounter() {
     Object.assign(boardGridEl.style, {
       position: "relative",
       width: "100%",
-      height: "100%",
+      height: "100%"
     });
 
     boardContainer.appendChild(boardGridEl);
@@ -110,6 +118,7 @@ function ensureOverlayAndCounter() {
     boardGridEl.appendChild(counterEl);
   }
 
+  // make sure it's above the board image
   counterEl.style.position = "absolute";
   counterEl.style.zIndex = "10";
 }
@@ -138,8 +147,8 @@ function buildBoardGrid() {
   let pos = 1;
 
   for (let rFromBottom = 0; rFromBottom < ROWS; rFromBottom++) {
-    const realRowIndex = ROWS - 1 - rFromBottom;
-    const leftToRight = rFromBottom % 2 === 0; // 1st,3rd,5th bottom rows L→R
+    const realRowIndex = ROWS - 1 - rFromBottom; // top->bottom index
+    const leftToRight = rFromBottom % 2 === 0;   // 1st,3rd,5th rows L→R
 
     for (let col = 0; col < COLS; col++) {
       const visualCol = leftToRight ? col : COLS - 1 - col;
@@ -151,7 +160,7 @@ function buildBoardGrid() {
         left: `${x}px`,
         top: `${y}px`,
         width: `${cellW}px`,
-        height: `${cellH}px`,
+        height: `${cellH}px`
       });
 
       cellsByPosition[pos] = cell;
@@ -176,7 +185,7 @@ function getCellCenter(position) {
 }
 
 function placeCounter(position) {
-  if (!counterEl || !boardGridEl || position <= 0) return;
+  if (!counterEl || !boardGridEl) return;
 
   const { x, y } = getCellCenter(position);
   counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
@@ -262,14 +271,9 @@ async function loadState() {
 // ---- Dice animation ----
 function animateDiceRolling() {
   if (!diceEl) return;
-  // use .spin class, which matches your CSS keyframes
+  // use the existing .dice.spin CSS animation
   diceEl.classList.add("spin");
-  setTimeout(() => diceEl.classList.remove("spin"), 500);
-}
-
-// simple delay helper
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  setTimeout(() => diceEl.classList.remove("spin"), 700);
 }
 
 // ---- Roll button handler ----
@@ -284,7 +288,7 @@ async function handleRoll() {
     const res = await fetch(`${API}/player/roll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
+      body: JSON.stringify({ email, area })
     });
 
     const data = await res.json();
@@ -298,7 +302,6 @@ async function handleRoll() {
     const diceValue = data.dice;
 
     if (diceEl) {
-      // update the dice face slightly after the spin starts
       setTimeout(() => {
         diceEl.textContent = String(diceValue);
       }, 350);
@@ -314,9 +317,6 @@ async function handleRoll() {
     rollsGranted = data.rollsGranted;
     currentReward = data.reward ?? null;
     gameCompleted = !!data.completed;
-
-    // Tiny delay between dice resolving and the counter starting to move
-    await sleep(650);
 
     await animateMove(fromPosition, normalEnd, toPosition, isSnake, isLadder);
     updateStatusUI();
@@ -347,6 +347,7 @@ function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) 
     function stepSquares() {
       if (index >= pathSquares.length) {
         if (finalPosition !== normalEnd) {
+          // Now perform snake / ladder animation
           if (isSnake) {
             animateSnakeSlide(normalEnd, finalPosition).then(endSequence);
           } else if (isLadder) {
@@ -374,6 +375,7 @@ function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) 
     }
 
     if (pathSquares.length === 0) {
+      // landed exactly where you were (shouldn't really happen)
       if (isSnake) {
         animateSnakeSlide(fromPosition, finalPosition).then(endSequence);
       } else if (isLadder) {
@@ -387,7 +389,7 @@ function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) 
   });
 }
 
-// ---- Snake slide (curved) ----
+// ---- S1: curved snake slide ----
 function animateSnakeSlide(startPos, endPos) {
   return new Promise((resolve) => {
     snakeSound.currentTime = 0;
@@ -399,6 +401,7 @@ function animateSnakeSlide(startPos, endPos) {
     const midX = (start.x + end.x) / 2;
     const midY = (start.y + end.y) / 2;
 
+    // Give the curve some "belly" depending on vertical direction
     const offset = (start.y < end.y ? -1 : 1) * 80;
     const ctrl = { x: midX, y: midY + offset };
 
@@ -410,9 +413,14 @@ function animateSnakeSlide(startPos, endPos) {
       const inv = 1 - t;
 
       const x =
-        inv * inv * start.x + 2 * inv * t * ctrl.x + t * t * end.x;
+        inv * inv * start.x +
+        2 * inv * t * ctrl.x +
+        t * t * end.x;
+
       const y =
-        inv * inv * start.y + 2 * inv * t * ctrl.y + t * t * end.y;
+        inv * inv * start.y +
+        2 * inv * t * ctrl.y +
+        t * t * end.y;
 
       counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
 
@@ -427,7 +435,7 @@ function animateSnakeSlide(startPos, endPos) {
   });
 }
 
-// ---- Ladder climb (straight) ----
+// ---- L1: ladder climb (straight line) ----
 function animateLadderClimb(startPos, endPos) {
   return new Promise((resolve) => {
     ladderSound.currentTime = 0;
@@ -456,64 +464,73 @@ function animateLadderClimb(startPos, endPos) {
   });
 }
 
-// ---- Confetti (DOM-based, big burst before overlay) ----
+// ---- Congratulations + confetti ----
 function fireConfetti() {
-  if (!confettiContainer) return;
-
-  confettiContainer.innerHTML = "";
-  confettiContainer.classList.add("show");
-
-  const colors = ["#f97316", "#22c55e", "#38bdf8", "#6366f1", "#e11d48", "#facc15"];
-
-  const pieceCount = 180;
-  for (let i = 0; i < pieceCount; i++) {
-    const piece = document.createElement("div");
-    piece.className = "confetti-piece";
-    piece.style.left = `${Math.random() * 100}%`;
-    piece.style.backgroundColor = colors[i % colors.length];
-    piece.style.animationDelay = `${Math.random() * 0.5}s`;
-    confettiContainer.appendChild(piece);
-  }
-
-  // hide after animation
+  if (typeof confetti !== "function") return;
+  // big centre burst
+  confetti({
+    particleCount: 320,
+    spread: 120,
+    startVelocity: 45,
+    origin: { y: 0.45 },
+    ticks: 240
+  });
   setTimeout(() => {
-    confettiContainer.classList.remove("show");
-    confettiContainer.innerHTML = "";
-  }, 2300);
+    confetti({
+      particleCount: 180,
+      spread: 70,
+      origin: { x: 0.2, y: 0.5 }
+    });
+    confetti({
+      particleCount: 180,
+      spread: 70,
+      origin: { x: 0.8, y: 0.5 }
+    });
+  }, 220);
 }
 
-// ---- Congratulations + overlay (2s after confetti starts) ----
 function showCompletion(reward) {
+  winSound.currentTime = 0;
+  winSound.play().catch(() => {});
+
+  if (!winOverlay) winOverlay = document.getElementById("winOverlay");
+  if (!winMessage) winMessage = document.getElementById("winMessage");
+  if (!winCloseBtn) winCloseBtn = document.getElementById("winCloseBtn");
+
+  if (!winOverlay) return;
+
+  if (winMessage) {
+    winMessage.textContent = reward
+      ? `You have earned £${reward} Champions Points!`
+      : "You have completed the board!";
+  }
+
+  // Make the congratulations card bigger + more prominent
+  const card = winOverlay.querySelector(".win-card");
+  if (card) {
+    card.style.maxWidth = "560px";
+    card.style.padding = "40px 52px";
+    card.style.transform = "scale(1.3)";
+    const heading = card.querySelector("h2");
+    const para = card.querySelector("p");
+    if (heading) heading.style.fontSize = "2.3rem";
+    if (para) para.style.fontSize = "1.05rem";
+  }
+
+  winOverlay.classList.remove("hidden");
+  winOverlay.style.display = "flex";
+
   fireConfetti();
 
-  setTimeout(() => {
-    winSound.currentTime = 0;
-    winSound.play().catch(() => {});
+  function closeOverlay() {
+    winOverlay.style.display = "none";
+    winOverlay.classList.add("hidden");
+  }
 
-    if (!winOverlay) winOverlay = document.getElementById("winOverlay");
-    if (!winMessage) winMessage = document.getElementById("winMessage");
-    if (!winCloseBtn) winCloseBtn = document.getElementById("winCloseBtn");
-    if (!winOverlay) return;
-
-    if (winMessage) {
-      winMessage.textContent = reward
-        ? `You have earned £${reward} Champions Points!`
-        : "You have completed the board!";
-    }
-
-    winOverlay.classList.remove("hidden");
-    winOverlay.style.display = "flex";
-
-    function closeOverlay() {
-      winOverlay.style.display = "none";
-      winOverlay.classList.add("hidden");
-    }
-
-    winCloseBtn?.addEventListener("click", closeOverlay);
-    winOverlay.addEventListener("click", (e) => {
-      if (e.target === winOverlay) closeOverlay();
-    });
-  }, 2000);
+  winCloseBtn?.addEventListener("click", closeOverlay);
+  winOverlay.addEventListener("click", (e) => {
+    if (e.target === winOverlay) closeOverlay();
+  });
 }
 
 // ---- Counter style selection ----
@@ -533,11 +550,13 @@ function initCounterChoice() {
 
   counterChoiceButtons.forEach((btn, i) => {
     const idx = i + 1;
-    if (idx === saved) btn.classList.add("active"); // match CSS
+    if (idx === saved) btn.classList.add("counter-choice-active");
 
     btn.addEventListener("click", () => {
-      counterChoiceButtons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
+      counterChoiceButtons.forEach((b) =>
+        b.classList.remove("counter-choice-active")
+      );
+      btn.classList.add("counter-choice-active");
       localStorage.setItem("counterTheme", String(idx));
       applyCounterTheme(idx);
       placeCounter(currentPosition || 1);
