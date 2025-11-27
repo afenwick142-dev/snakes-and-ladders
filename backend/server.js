@@ -1,3 +1,4 @@
+// server.js
 // --- Snakes & Ladders Backend ---
 // Complete backend for Anthony Fenwick
 // - Auto-creates all required tables
@@ -590,7 +591,7 @@ app.post("/grant-rolls/undo", async (req, res) => {
   }
 });
 
-// Save prize settings for an area
+// Save prize settings for an area (number of £25 winners)
 app.post("/area/prize", async (req, res) => {
   try {
     let { area, count } = req.body;
@@ -617,6 +618,39 @@ app.post("/area/prize", async (req, res) => {
   } catch (err) {
     console.error("Save prize config error:", err);
     return res.status(500).json({ error: "Failed to save prize config." });
+  }
+});
+
+// Get prize settings + remaining £25s for an area
+app.get("/area/prize", async (req, res) => {
+  try {
+    let area = normaliseArea(req.query.area);
+    if (!area) {
+      return res.status(400).json({ error: "Area is required." });
+    }
+
+    const cfg = await pool.query(
+      "SELECT winners FROM prize_config WHERE area = $1",
+      [area]
+    );
+    const winners = cfg.rows.length > 0 ? cfg.rows[0].winners || 0 : 0;
+
+    const used25Res = await pool.query(
+      "SELECT COUNT(*) FROM players WHERE area = $1 AND reward = 25",
+      [area]
+    );
+    const used25 = parseInt(used25Res.rows[0].count, 10) || 0;
+    const remaining25 = Math.max(0, winners - used25);
+
+    return res.json({
+      area,
+      winners,
+      used25,
+      remaining25,
+    });
+  } catch (err) {
+    console.error("Get prize config error:", err);
+    return res.status(500).json({ error: "Failed to load prize config." });
   }
 });
 
