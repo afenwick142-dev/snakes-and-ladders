@@ -20,26 +20,24 @@ function showAdminMessage(msg, isError = true) {
   }
 }
 
-async function handleAdminLogin(evt) {
-  evt.preventDefault();
+async function handleAdminLogin(e) {
+  e.preventDefault();
   showAdminMessage("");
 
-  const username = (usernameInput?.value || "admin").trim() || "admin";
+  const username = (usernameInput?.value || "").trim();
   const password = (passwordInput?.value || "").trim();
 
-  if (!password) {
-    showAdminMessage("Password required.");
+  if (!username || !password) {
+    showAdminMessage("Please enter both username and password.");
     return;
   }
 
-  loginButton && (loginButton.disabled = true);
+  if (loginButton) loginButton.disabled = true;
 
   try {
     const res = await fetch(`${API}/admin/login`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
 
@@ -47,13 +45,12 @@ async function handleAdminLogin(evt) {
     try {
       data = await res.json();
     } catch {
-      // ignore parse errors
+      // ignore JSON parse errors
     }
 
-    if (!res.ok || data.success !== true) {
-      const msg = (data && data.error) || "Invalid password.";
-      showAdminMessage(msg, true);
-      loginButton && (loginButton.disabled = false);
+    if (!res.ok || !data.success) {
+      showAdminMessage(data.error || "Incorrect username or password.");
+      if (loginButton) loginButton.disabled = false;
       return;
     }
 
@@ -65,7 +62,7 @@ async function handleAdminLogin(evt) {
   } catch (err) {
     console.error("Admin login error:", err);
     showAdminMessage("Server error – please try again.");
-    loginButton && (loginButton.disabled = false);
+    if (loginButton) loginButton.disabled = false;
   }
 }
 
