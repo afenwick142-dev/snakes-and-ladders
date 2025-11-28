@@ -4,14 +4,12 @@
   <meta charset="UTF-8" />
   <title>Snakes &amp; Ladders – Game</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Load CSS from root -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="page page-game">
 
   <header class="top-bar">
     <div class="top-left">
-      <!-- Logo properly styled -->
       <img src="sw-logo.png" alt="SW Logo" class="logo-img" />
       <div class="brand">
         <div class="brand-title">Snakes &amp; Ladders</div>
@@ -31,11 +29,10 @@
 
       <div class="board-container">
         <div id="boardGrid" class="board-grid"></div>
-        <!-- Main playing counter -->
         <div id="counter" class="counter hidden"></div>
       </div>
 
-      <!-- Counter style UNDER the board -->
+      <!-- Counter style under the board -->
       <section class="counter-style-section">
         <h3>Counter Style</h3>
         <p class="helper-text">Pick your playing piece.</p>
@@ -50,7 +47,7 @@
       </section>
     </section>
 
-    <!-- RIGHT: Dice + Status -->
+    <!-- RIGHT: Panels -->
     <aside class="side-panel">
       <section class="card">
         <h3>Dice</h3>
@@ -93,7 +90,6 @@
     </div>
   </div>
 
-  <!-- Load JS once, at the end -->
   <script src="game.js"></script>
 </body>
 </html>
