@@ -470,21 +470,27 @@ select:focus {
 }
 
 .win-card {
-  max-width: 420px;
-  padding: 28px 32px;
-  border-radius: 24px;
+  max-width: 640px;               /* wider card */
+  padding: 40px 48px;             /* more breathing space */
+  border-radius: 28px;
   text-align: center;
-  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.95), rgba(15, 23, 42, 0.98));
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+  background: radial-gradient(
+    circle at top,
+    rgba(59, 130, 246, 0.97),
+    rgba(15, 23, 42, 0.98)
+  );
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.85);
 }
 
 .win-card h2 {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  font-size: 2.2rem;              /* much larger title */
 }
 
 .win-card p {
-  margin-bottom: 20px;
-  font-size: 0.95rem;
+  margin-bottom: 26px;
+  font-size: 1.1rem;              /* bigger message text */
+}
 }
 
 /* ADMIN SECTION */
@@ -627,3 +633,4 @@ select:focus {
 .btn-small {
     margin-right: 6px;
 }
+
