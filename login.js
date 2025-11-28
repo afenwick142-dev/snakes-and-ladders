@@ -1,6 +1,5 @@
 // login.js
 // Player Register + Login for SW Snakes & Ladders
-// Works with the styled index.html (fullNameInput + swCodeSelect form)
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
@@ -16,97 +15,78 @@ const loginSubmitBtn = document.getElementById("loginSubmitBtn");
 // current mode: "login" | "register"
 let currentMode = "login";
 
-// --- MODE TOGGLING (PLAYER LOGIN / REGISTER) ---
+// --- HELPERS ---
+function showError(msg) {
+  if (!loginError) return;
+  loginError.textContent = msg || "";
+}
+
 function setMode(mode) {
   currentMode = mode;
 
-  // Toggle button styling
+  // Toggle active button styling
   modeButtons.forEach((btn) => {
-    if (btn.dataset.mode === mode) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
+    const btnMode = btn.dataset.mode;
+    btn.classList.toggle("active", btnMode === mode);
   });
 
-  // Update button text + helper copy
-  if (currentMode === "login") {
+  // Clear any previous error
+  showError("");
+
+  if (!loginHelperText || !loginSubmitBtn) return;
+
+  if (mode === "login") {
     loginSubmitBtn.textContent = "Login";
-    if (loginHelperText) {
-      loginHelperText.textContent =
-        "Login: use the same entaingroup.com / lcroot login and SW area you registered with to continue your game.";
-    }
+    loginHelperText.textContent =
+      "Login: use the same entaingroup.com / lcroot login and SW area you registered with to continue your game.";
   } else {
     loginSubmitBtn.textContent = "Register";
-    if (loginHelperText) {
-      loginHelperText.textContent =
-        "Register: new players should register once with their entaingroup.com / lcroot login and SW area before using Player login.";
-    }
-  }
-
-  // Clear messages
-  if (loginError) {
-    loginError.textContent = "";
+    loginHelperText.textContent =
+      "Register: create your player record for this SW area, then switch to Player login to continue your game.";
   }
 }
 
+// --- INITIAL MODE ---
+setMode("login");
+
+// --- TOGGLE BUTTON HANDLERS ---
 modeButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
-    const mode = btn.dataset.mode === "register" ? "register" : "login";
+    const mode = btn.dataset.mode || "login";
     setMode(mode);
   });
 });
 
-// Ensure default state matches the active button in the HTML
-const initiallyActive = document.querySelector(".login-mode-btn.active");
-if (initiallyActive && initiallyActive.dataset.mode) {
-  currentMode = initiallyActive.dataset.mode;
-} else {
-  currentMode = "login";
-}
-setMode(currentMode);
-
-// --- HELPERS ---
-function normaliseEmailOrLogin(value) {
-  return (value || "").trim();
-}
-
-function normaliseArea(value) {
-  return (value || "").trim().toUpperCase();
-}
-
-function showError(message) {
-  if (loginError) {
-    loginError.textContent = message || "";
-  }
-}
-
-// --- FORM SUBMIT HANDLER ---
-loginForm?.addEventListener("submit", async (evt) => {
-  evt.preventDefault();
+// --- FORM SUBMIT ---
+loginForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
   showError("");
 
-  const emailRaw = fullNameInput.value;
-  const areaRaw = swCodeSelect.value;
+  const rawLogin = (fullNameInput?.value || "").trim();
+  const area = (swCodeSelect?.value || "").trim();
 
-  const email = normaliseEmailOrLogin(emailRaw);
-  const area = normaliseArea(areaRaw);
-
-  if (!email || !area) {
-    showError("Please enter your entaingroup.com / lcroot login and select your SW area.");
+  if (!rawLogin) {
+    showError("Please enter your entaingroup.com / lcroot login.");
     return;
   }
 
-  // Decide endpoint based on mode
+  if (!area) {
+    showError("Please select your SW area.");
+    return;
+  }
+
+  // Backend treats this as a generic identifier (normalised to lowercase)
+  const email = rawLogin.toLowerCase();
+
   const endpoint =
     currentMode === "register" ? "/player/register" : "/player/login";
 
   try {
+    if (loginSubmitBtn) loginSubmitBtn.disabled = true;
+
     const res = await fetch(`${API}${endpoint}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, area }),
     });
 
@@ -114,26 +94,25 @@ loginForm?.addEventListener("submit", async (evt) => {
     try {
       data = await res.json();
     } catch {
-      // ignore JSON parse errors, we'll fall back to generic messages
+      // ignore JSON parse errors, will fall back to generic error
     }
 
-    if (!res.ok || data.success === false) {
-      const msg =
-        (data && data.error) ||
-        (currentMode === "register"
-          ? "Registration failed."
-          : "Login failed.");
+    if (!res.ok || !data.success) {
+      const action =
+        currentMode === "register" ? "register right now." : "log in right now.";
+      const msg = data.error || `Unable to ${action}`;
       showError(msg);
+      if (loginSubmitBtn) loginSubmitBtn.disabled = false;
       return;
     }
 
     if (currentMode === "register") {
-      // Registration successful – do NOT go straight into the game.
-      // Ask the player to switch to Player login as per your requirement.
+      // Registration successful – stay on login page as requested
       showError(
         "Registration successful. Now select Player login and use the same details to continue your game."
       );
       setMode("login");
+      if (loginSubmitBtn) loginSubmitBtn.disabled = false;
       return;
     }
 
@@ -145,5 +124,6 @@ loginForm?.addEventListener("submit", async (evt) => {
   } catch (err) {
     console.error("Login error:", err);
     showError("Server error – please try again.");
+    if (loginSubmitBtn) loginSubmitBtn.disabled = false;
   }
 });
