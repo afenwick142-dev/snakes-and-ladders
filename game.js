@@ -257,9 +257,19 @@ async function loadState() {
 // ---- Dice animation ----
 function animateDiceRolling() {
   if (!diceEl) return;
-  // Uses .dice.spin and @keyframes spinDice from style.css
+
+  // Make sure we can restart the CSS animation every roll
+  diceEl.classList.remove("spin");
+  // Force reflow so the browser sees it as a "fresh" animation
+  // (this is the usual trick to consistently restart CSS keyframes)
+  // eslint-disable-next-line no-unused-expressions
+  void diceEl.offsetWidth;
   diceEl.classList.add("spin");
-  setTimeout(() => diceEl.classList.remove("spin"), 600);
+
+  // Clean up the class after the animation duration
+  setTimeout(() => {
+    diceEl.classList.remove("spin");
+  }, 550);
 }
 
 // ---- Movement animations ----
@@ -503,7 +513,7 @@ async function handleRoll() {
     gameCompleted = !!data.completed;
 
     // Small delay so dice + sound feel separate from movement
-    await sleep(650);
+    await sleep(450);
 
     isAnimating = true;
     await animateMove(fromPosition, diceValue, toPosition, isSnake, isLadder);
