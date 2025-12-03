@@ -56,6 +56,7 @@ async function handleAdminLogin(e) {
 
     // success
     localStorage.setItem("adminLoggedIn", "yes");
+    localStorage.setItem("adminLastActive", String(Date.now()));
     showAdminMessage("Login successful. Redirecting…", false);
 
     window.location.href = "admin.html";
