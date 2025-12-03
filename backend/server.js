@@ -53,6 +53,7 @@ const JUMPS = {
   20: 29,
   17: 4,
   19: 7,
+  21: 9, // NEW snake
   27: 1,
 };
 
@@ -707,3 +708,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Snakes & Ladders backend running on port ${PORT}`);
 });
+
