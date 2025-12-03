@@ -35,7 +35,6 @@ function getSelectedArea() {
   return (areaSelect?.value || "").trim().toUpperCase();
 }
 
-// update last active timestamp in localStorage
 function touchAdminActivity() {
   localStorage.setItem("adminLastActive", String(Date.now()));
 }
@@ -49,14 +48,12 @@ function ensureLoggedIn() {
   const now = Date.now();
 
   if (flag !== "yes" || !lastActive || now - lastActive > ADMIN_IDLE_MS) {
-    // expired session – log out
     localStorage.removeItem("adminLoggedIn");
     localStorage.removeItem("adminLastActive");
     window.location.href = "admin-login.html";
     return;
   }
 
-  // still valid – refresh activity time
   touchAdminActivity();
 }
 
@@ -109,7 +106,6 @@ function renderPlayers(players, area) {
   if (!playersTableBody) return;
   playersTableBody.innerHTML = "";
 
-  // Update "Players in SWx (n)" label
   const header = playersAreaLabel?.parentNode;
   if (header) {
     header.innerHTML = `Players in <span id="playersAreaLabel">${area}</span> (${players.length})`;
@@ -129,7 +125,6 @@ function renderPlayers(players, area) {
   players.forEach((p) => {
     const row = document.createElement("tr");
 
-    // select checkbox
     const selectCell = document.createElement("td");
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -137,27 +132,22 @@ function renderPlayers(players, area) {
     selectCell.appendChild(cb);
     row.appendChild(selectCell);
 
-    // email
     const emailCell = document.createElement("td");
     emailCell.textContent = p.email;
     row.appendChild(emailCell);
 
-    // area
     const areaCell = document.createElement("td");
     areaCell.textContent = p.area;
     row.appendChild(areaCell);
 
-    // position
     const posCell = document.createElement("td");
     posCell.textContent = p.position ?? 0;
     row.appendChild(posCell);
 
-    // rolls used
     const usedCell = document.createElement("td");
     usedCell.textContent = p.rolls_used ?? 0;
     row.appendChild(usedCell);
 
-    // rolls granted
     const grantedCell = document.createElement("td");
     const used = p.rolls_used ?? 0;
     const granted = p.rolls_granted ?? 0;
@@ -165,12 +155,10 @@ function renderPlayers(players, area) {
     grantedCell.textContent = `${granted} (avail: ${available})`;
     row.appendChild(grantedCell);
 
-    // completed
     const completedCell = document.createElement("td");
     completedCell.textContent = p.completed ? "Yes" : "No";
     row.appendChild(completedCell);
 
-    // reward
     const rewardCell = document.createElement("td");
     rewardCell.textContent =
       p.reward === 25
@@ -180,7 +168,6 @@ function renderPlayers(players, area) {
         : "—";
     row.appendChild(rewardCell);
 
-    // actions
     const actionsCell = document.createElement("td");
     const resetBtn = document.createElement("button");
     resetBtn.textContent = "Reset";
@@ -423,7 +410,6 @@ function handleSelectAllToggle() {
 function initAdmin() {
   ensureLoggedIn();
 
-  // track activity for idle timeout
   window.addEventListener("mousemove", touchAdminActivity);
   window.addEventListener("keydown", touchAdminActivity);
   window.addEventListener("click", touchAdminActivity);
