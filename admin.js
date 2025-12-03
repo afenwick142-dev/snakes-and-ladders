@@ -3,6 +3,9 @@
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
+// Idle timeout (5 minutes)
+const ADMIN_IDLE_LIMIT_MS = 5 * 60 * 1000;
+
 // ----- ELEMENTS -----
 const areaSelect = document.getElementById("adminArea");
 
@@ -34,11 +37,40 @@ function getSelectedArea() {
   return (areaSelect?.value || "").trim().toUpperCase();
 }
 
+// --- admin session helpers (front-end only) ---
+function clearAdminSession(showExpiryAlert = false) {
+  localStorage.removeItem("adminLoggedIn");
+  localStorage.removeItem("adminLastActive");
+  if (showExpiryAlert) {
+    alert("Admin session expired due to inactivity. Please log in again.");
+  }
+  window.location.href = "admin-login.html";
+}
+
+function touchAdminActivity() {
+  const flag = localStorage.getItem("adminLoggedIn");
+  if (flag === "yes") {
+    localStorage.setItem("adminLastActive", String(Date.now()));
+  }
+}
+
 function ensureLoggedIn() {
   const flag = localStorage.getItem("adminLoggedIn");
   if (flag !== "yes") {
     window.location.href = "admin-login.html";
+    return;
   }
+
+  const last = parseInt(localStorage.getItem("adminLastActive") || "0", 10);
+  const now = Date.now();
+
+  if (!last || now - last > ADMIN_IDLE_LIMIT_MS) {
+    clearAdminSession(true);
+    return;
+  }
+
+  // refresh activity time on successful check
+  localStorage.setItem("adminLastActive", String(now));
 }
 
 function getSelectedPlayerEmails() {
@@ -160,97 +192,37 @@ function renderPlayers(players, area) {
 
     // actions
     const actionsCell = document.createElement("td");
-    const resetBtn = document.createElement("button");
-    resetBtn.textContent = "Reset";
-    resetBtn.className = "btn btn-secondary btn-small";
-    resetBtn.addEventListener("click", () => resetPlayer(p.email, p.area));
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "Delete";
-    deleteBtn.className = "btn btn-danger btn-small";
-    deleteBtn.addEventListener("click", () => deletePlayer(p.email, p.area));
-
-    actionsCell.appendChild(resetBtn);
-    actionsCell.appendChild(deleteBtn);
+    actionsCell.textContent = "-";
     row.appendChild(actionsCell);
 
     playersTableBody.appendChild(row);
   });
-
-  if (selectAllCheckbox) selectAllCheckbox.checked = false;
-}
-
-// ----- RESET / DELETE PLAYER -----
-async function resetPlayer(email, area) {
-  if (!confirm(`Reset game progress for ${email}?`)) return;
-
-  try {
-    const res = await fetch(`${API}/player/reset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      showStatus(data.error || "Failed to reset player.", true);
-      return;
-    }
-
-    showStatus(`Reset progress for ${email}.`);
-    loadPlayersForArea();
-  } catch (err) {
-    console.error("Reset player error:", err);
-    showStatus("Server error resetting player.", true);
-  }
-}
-
-async function deletePlayer(email, area) {
-  if (!confirm(`Delete player ${email} from ${area}?`)) return;
-
-  try {
-    const res = await fetch(`${API}/player/delete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      showStatus(data.error || "Failed to delete player.", true);
-      return;
-    }
-
-    showStatus(`Deleted player ${email}.`);
-    loadPlayersForArea();
-  } catch (err) {
-    console.error("Delete player error:", err);
-    showStatus("Server error deleting player.", true);
-  }
 }
 
 // ----- GRANT ROLLS -----
-async function handleGrantRolls(toSelectedOnly) {
+async function handleGrantRolls(selectedOnly) {
   const area = getSelectedArea();
   if (!area) {
     showStatus("Please select an area first.", true);
     return;
   }
 
-  const count = parseInt(grantCountInput?.value || "0", 10);
-  if (!Number.isInteger(count) || count === 0) {
-    showStatus(
-      "Enter a non-zero whole number of rolls to grant or remove.",
-      true
-    );
+  if (!grantCountInput) {
+    showStatus("Grant input not found.", true);
     return;
   }
 
-  let emails;
-  if (toSelectedOnly) {
+  const count = parseInt(grantCountInput.value || "0", 10);
+  if (!Number.isInteger(count) || count < 0) {
+    showStatus("Enter a non-negative whole number for extra rolls.", true);
+    return;
+  }
+
+  let emails = [];
+  if (selectedOnly) {
     emails = getSelectedPlayerEmails();
     if (!emails.length) {
-      showStatus("Select at least one player to grant rolls to.", true);
+      showStatus("Select at least one player first.", true);
       return;
     }
   }
@@ -396,6 +368,13 @@ function handleSelectAllToggle() {
 // ----- INIT -----
 function initAdmin() {
   ensureLoggedIn();
+
+  // track activity for idle timer
+  ["click", "keydown", "mousemove", "scroll"].forEach((evt) => {
+    document.addEventListener(evt, touchAdminActivity);
+  });
+  // periodic check (once per minute is enough)
+  setInterval(ensureLoggedIn, 60 * 1000);
 
   areaSelect?.addEventListener("change", () => {
     loadPlayersForArea();
