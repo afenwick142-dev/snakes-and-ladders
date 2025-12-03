@@ -1,10 +1,9 @@
 // game.js
 // Front-end logic for SW Snakes & Ladders
-// - Works with your existing game.html + style.css
 // - Uses backend at /player/* and /area/*
 // - Animates the counter across the board, including snakes & ladders
 // - Shows big congratulations modal + confetti
-// - Dice shows a spinning animation, then the final face
+// - Dice uses GIF + sound, then shows the final number
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
@@ -16,6 +15,7 @@ let boardGridEl = document.getElementById("boardGrid");
 let counterEl = document.getElementById("counter");
 
 const diceEl = document.getElementById("dice");
+const diceGifEl = document.getElementById("diceGif");
 const rollBtn = document.getElementById("btnRoll");
 
 const statusPosition = document.getElementById("statusPosition");
@@ -79,10 +79,11 @@ const JUMPS = {
   20: 29,
   17: 4,
   19: 7,
-  27: 1
+  21: 9, // NEW snake head at 21 down to 9
+  27: 1,
 };
 
-const SNAKE_HEADS = new Set([17, 19, 27]);
+const SNAKE_HEADS = new Set([17, 19, 21, 27]);
 const LADDER_BASES = new Set([3, 5, 11, 20]);
 
 // map from position -> cell element
@@ -92,137 +93,119 @@ const cellsByPosition = {};
 function ensureOverlayAndCounter() {
   if (!boardGridEl) {
     const boardContainer =
-      document.querySelector(".board-container") ||
-      document.querySelector(".card-board") ||
-      document.body;
-
-    boardGridEl = document.createElement("div");
-    boardGridEl.id = "boardGrid";
-    boardGridEl.className = "board-grid";
-    Object.assign(boardGridEl.style, {
-      position: "relative",
-      width: "100%",
-      height: "100%"
-    });
-
-    boardContainer.appendChild(boardGridEl);
+      document.querySelector(".board-container") || document.body;
+    const grid = document.createElement("div");
+    grid.id = "boardGrid";
+    grid.className = "board-grid";
+    boardContainer.appendChild(grid);
+    boardGridEl = grid;
   }
 
   if (!counterEl) {
-    counterEl = document.createElement("div");
-    counterEl.id = "counter";
-    counterEl.className = "counter";
-    counterEl.style.position = "absolute";
-    counterEl.style.transform = "translate(-9999px, -9999px)";
-    counterEl.style.zIndex = "10";
-    boardGridEl.appendChild(counterEl);
+    const counter = document.createElement("div");
+    counter.id = "counter";
+    counter.className = "counter hidden";
+    const boardContainer =
+      document.querySelector(".board-container") || document.body;
+    boardContainer.appendChild(counter);
+    counterEl = counter;
+  }
+
+  if (!confettiCanvas) {
+    const confetti = document.createElement("div");
+    confetti.id = "confetti";
+    confetti.className = "confetti";
+    document.body.appendChild(confetti);
+  }
+
+  if (!winOverlay) {
+    const overlay = document.createElement("div");
+    overlay.id = "winOverlay";
+    overlay.className = "win-overlay hidden";
+    overlay.innerHTML = `
+      <div class="win-card">
+        <h2>Congratulations!</h2>
+        <p id="winMessage"></p>
+        <button id="winCloseBtn" class="btn btn-secondary">Close</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    winOverlay = overlay;
+    winMessage = document.getElementById("winMessage");
+    winCloseBtn = document.getElementById("winCloseBtn");
   }
 }
 
-// ---- Board generation ----
+ensureOverlayAndCounter();
+
+// ---- Build invisible board grid ----
 function buildBoardGrid() {
-  ensureOverlayAndCounter();
-
-  const existingCounter = counterEl;
+  if (!boardGridEl) return;
   boardGridEl.innerHTML = "";
-  boardGridEl.appendChild(existingCounter);
 
-  const rect = boardGridEl.getBoundingClientRect();
-  const cellW = rect.width / COLS;
-  const cellH = rect.height / ROWS;
-
-  let pos = 1;
-  for (let rowFromBottom = 0; rowFromBottom < ROWS; rowFromBottom++) {
-    const visualRow = ROWS - 1 - rowFromBottom;
-    const leftToRight = rowFromBottom % 2 === 0;
-
-    for (let col = 0; col < COLS; col++) {
-      const visualCol = leftToRight ? col : COLS - 1 - col;
-      const x = visualCol * cellW;
-      const y = visualRow * cellH;
-
+  let position = 0;
+  for (let row = ROWS; row >= 1; row--) {
+    const isEvenRow = (ROWS - row) % 2 === 1;
+    for (let col = 1; col <= COLS; col++) {
+      position++;
+      const actualCol = isEvenRow ? COLS - col + 1 : col;
       const cell = document.createElement("div");
       cell.className = "board-cell";
-      cell.dataset.square = String(pos);
-      Object.assign(cell.style, {
-        position: "absolute",
-        left: `${x}px`,
-        top: `${y}px`,
-        width: `${cellW}px`,
-        height: `${cellH}px`
-      });
-
+      cell.dataset.position = String(position);
       boardGridEl.appendChild(cell);
-      cellsByPosition[pos] = cell;
-      pos++;
+      cellsByPosition[position] = cell;
     }
   }
 }
 
-function getCellCenter(square) {
-  const cell = cellsByPosition[square];
-  if (!cell || !boardGridEl) return { x: 0, y: 0 };
-  const gridRect = boardGridEl.getBoundingClientRect();
+buildBoardGrid();
+
+// ---- Counter placement ----
+function getCellCenter(position) {
+  const cell = cellsByPosition[position];
+  const boardRect = boardGridEl.getBoundingClientRect();
   const cellRect = cell.getBoundingClientRect();
-  const x = cellRect.left + cellRect.width / 2 - gridRect.left;
-  const y = cellRect.top + cellRect.height / 2 - gridRect.top;
+  const x = cellRect.left + cellRect.width / 2 - boardRect.left;
+  const y = cellRect.top + cellRect.height / 2 - boardRect.top;
   return { x, y };
 }
 
-// ---- Counter placement ----
-function placeCounter(square) {
-  if (!boardGridEl || !counterEl) return;
-  if (square < 1) square = 1;
-  if (square > FINAL_SQUARE) square = FINAL_SQUARE;
-
-  const cell = cellsByPosition[square];
-  if (!cell) return;
-
-  const gridRect = boardGridEl.getBoundingClientRect();
-  const cellRect = cell.getBoundingClientRect();
-
-  const x = cellRect.left + cellRect.width / 2 - gridRect.left;
-  const y = cellRect.top + cellRect.height / 2 - gridRect.top;
-
-  const size = Math.min(cellRect.width, cellRect.height) * 0.7;
-  counterEl.style.width = `${size}px`;
-  counterEl.style.height = `${size}px`;
-  counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+function placeCounter(position) {
+  if (!counterEl || !boardGridEl) return;
   counterEl.classList.remove("hidden");
+
+  const { x, y } = getCellCenter(position);
+  counterEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
 }
 
-// ---- Counter style selection ----
-function applyCounterTheme(index) {
+// ---- Counter styles ----
+let selectedCounterThemeIndex = 0;
+
+function updateCounterTheme() {
   if (!counterEl) return;
-  for (let i = 1; i <= 6; i++) {
-    counterEl.classList.remove(`counter-theme-${i}`);
-  }
-  if (index >= 1 && index <= 6) {
-    counterEl.classList.add(`counter-theme-${index}`);
-  }
+  counterEl.className = `counter counter-theme-${selectedCounterThemeIndex + 1}`;
 }
 
-function initCounterChoice() {
-  const saved = parseInt(localStorage.getItem("counterTheme") || "1", 10);
-  applyCounterTheme(saved);
-
-  counterChoiceButtons.forEach((btn, i) => {
-    const idx = i + 1;
-    if (idx === saved) btn.classList.add("counter-choice-active");
-
-    btn.addEventListener("click", () => {
-      counterChoiceButtons.forEach((b) =>
-        b.classList.remove("counter-choice-active")
-      );
-      btn.classList.add("counter-choice-active");
-      localStorage.setItem("counterTheme", String(idx));
-      applyCounterTheme(idx);
-      placeCounter(currentPosition || 1);
-    });
+counterChoiceButtons.forEach((btn, index) => {
+  btn.addEventListener("click", () => {
+    counterChoiceButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    selectedCounterThemeIndex = index;
+    updateCounterTheme();
+    if (currentPosition > 0) {
+      placeCounter(currentPosition);
+    }
   });
+});
+
+// default counter theme
+if (counterChoiceButtons[0]) {
+  counterChoiceButtons[0].classList.add("active");
+  selectedCounterThemeIndex = 0;
+  updateCounterTheme();
 }
 
-// ---- State ----
+// ---- Status state ----
 let currentPosition = 0;
 let rollsUsed = 0;
 let rollsGranted = 0;
@@ -298,31 +281,54 @@ async function loadState() {
   }
 }
 
-// ---- Dice animation ----
-function animateDiceRolling() {
-  if (!diceEl) return;
-  // match .dice.spin in style.css
-  diceEl.classList.add("spin");
-  setTimeout(() => diceEl.classList.remove("spin"), 700);
+// ---- Dice animation helpers ----
+function startDiceAnimation() {
+  try {
+    diceSound.currentTime = 0;
+    diceSound.play().catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  if (diceGifEl) {
+    diceGifEl.classList.remove("hidden");
+  }
+
+  if (diceEl) {
+    diceEl.classList.add("spin");
+    diceEl.textContent = "";
+  }
+}
+
+function stopDiceAnimation(finalValue) {
+  if (diceGifEl) {
+    diceGifEl.classList.add("hidden");
+  }
+
+  if (diceEl) {
+    diceEl.classList.remove("spin");
+    diceEl.textContent =
+      finalValue !== undefined && finalValue !== null ? String(finalValue) : "–";
+  }
 }
 
 // ---- Roll button handler ----
 async function handleRoll() {
   if (gameCompleted) return;
 
-  try {
-    diceSound.currentTime = 0;
-    diceSound.play().catch(() => {});
-    animateDiceRolling();
+  startDiceAnimation();
 
+  try {
     const res = await fetch(`${API}/player/roll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, area })
+      body: JSON.stringify({ email, area }),
     });
 
-    const data = await res.json();
-    if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      stopDiceAnimation(null);
       alert(data.error || "Unable to roll right now.");
       return;
     }
@@ -331,12 +337,10 @@ async function handleRoll() {
     const fromPosition = data.fromPosition;
     const toPosition = data.position;
 
-    if (diceEl) {
-      // small delay before final value appears, so the spin is visible
-      setTimeout(() => {
-        diceEl.textContent = String(diceValue);
-      }, 350);
-    }
+    // let the GIF spin briefly, then show the number
+    setTimeout(() => {
+      stopDiceAnimation(diceValue);
+    }, 350);
 
     const normalEnd = Math.min(fromPosition + diceValue, FINAL_SQUARE);
     const jumped = toPosition !== normalEnd;
@@ -359,6 +363,7 @@ async function handleRoll() {
     }
   } catch (err) {
     console.error("Roll error:", err);
+    stopDiceAnimation(null);
     alert("Server error – please try again.");
   }
 }
@@ -457,11 +462,12 @@ function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) 
         return;
       }
 
-      const pos = pathSquares[index++];
+      const pos = pathSquares[index];
       placeCounter(pos);
       moveSound.currentTime = 0;
       moveSound.play().catch(() => {});
-      setTimeout(stepSquares, 260);
+      index++;
+      setTimeout(stepSquares, 150);
     }
 
     function endSequence() {
@@ -469,79 +475,62 @@ function animateMove(fromPosition, normalEnd, finalPosition, isSnake, isLadder) 
       resolve();
     }
 
-    if (pathSquares.length === 0) {
-      if (isSnake) {
-        animateSnakeSlide(fromPosition, finalPosition).then(endSequence);
-      } else if (isLadder) {
-        animateLadderClimb(fromPosition, finalPosition).then(endSequence);
-      } else {
-        endSequence();
-      }
-    } else {
-      stepSquares();
-    }
+    stepSquares();
   });
 }
 
-// ---- Confetti ----
-function triggerConfetti() {
-  if (!confettiCanvas) return;
+// ---- Confetti + completion ----
+function launchConfetti() {
+  const container = document.getElementById("confetti");
+  if (!container) return;
 
-  confettiCanvas.innerHTML = "";
-  confettiCanvas.classList.add("show");
+  container.innerHTML = "";
+  container.classList.add("show");
 
-  const colors = [
-    "#f97316",
-    "#22c55e",
-    "#38bdf8",
-    "#6366f1",
-    "#e11d48",
-    "#facc15",
-    "#ffffff"
-  ];
+  const colors = ["#f97316", "#22c55e", "#38bdf8", "#6366f1", "#e11d48", "#facc15"];
 
-  const pieces = 160;
+  const pieces = 120;
   for (let i = 0; i < pieces; i++) {
     const piece = document.createElement("div");
     piece.className = "confetti-piece";
     piece.style.left = Math.random() * 100 + "vw";
-    piece.style.animationDelay = Math.random() * 0.7 + "s";
-    piece.style.opacity = String(0.7 + Math.random() * 0.3);
     piece.style.backgroundColor = colors[i % colors.length];
-    confettiCanvas.appendChild(piece);
+    piece.style.animationDelay = Math.random() * 0.5 + "s";
+    container.appendChild(piece);
   }
 
   setTimeout(() => {
-    confettiCanvas.classList.remove("show");
-    confettiCanvas.innerHTML = "";
-  }, 2300);
+    container.classList.remove("show");
+    container.innerHTML = "";
+  }, 2500);
 }
 
-// ---- Winner overlay ----
 function showCompletion(reward) {
-  setTimeout(() => {
-    triggerConfetti();
-  }, 200);
-
-  setTimeout(() => {
-    if (!winOverlay || !winMessage) return;
-
-    winMessage.textContent = `You have earned £${reward || 10} Champions Points!`;
-    winOverlay.classList.remove("hidden");
+  try {
     winSound.currentTime = 0;
     winSound.play().catch(() => {});
-  }, 2400);
+  } catch {
+    // ignore
+  }
+  launchConfetti();
+
+  if (winOverlay) {
+    winOverlay.classList.remove("hidden");
+  }
+  if (winMessage) {
+    const rewardText =
+      reward === 25
+        ? "£25 Champions Points"
+        : reward === 10
+        ? "£10 Champions Points"
+        : "your Champions Points prize";
+    winMessage.textContent = `You reached square 30! You’ve secured ${rewardText}.`;
+  }
+
+  winCloseBtn?.addEventListener("click", () => {
+    if (winOverlay) winOverlay.classList.add("hidden");
+  });
 }
 
-winCloseBtn?.addEventListener("click", () => {
-  winOverlay?.classList.add("hidden");
-});
-
-// ---- Init ----
-buildBoardGrid();
-initCounterChoice();
+// ---- Initial load ----
 loadState();
-
-window.addEventListener("resize", () => {
-  if (currentPosition > 0) placeCounter(currentPosition);
-});
