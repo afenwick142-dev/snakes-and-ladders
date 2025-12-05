@@ -1,179 +1,413 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Snakes &amp; Ladders – Admin</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body class="page page-admin">
-  <!-- TOP BAR WITH LOGO + BACK LINK -->
-  <header class="top-bar">
-    <div class="top-left">
-      <img src="sw-logo.png" alt="SW Logo" class="logo-img" />
-      <div class="brand-text">
-        <div class="brand-title">Snakes &amp; Ladders Admin</div>
-        <div class="brand-sub">SW Multichannel Challenge – Control Panel</div>
-      </div>
-    </div>
+// admin.js
+// Admin portal logic for Snakes & Ladders
 
-    <div class="top-right">
-      <a href="game.html" class="ghost-button">Back to game</a>
-      <button
-        id="adminLogoutBtn"
-        class="btn btn-secondary btn-small"
-        style="margin-left: 12px;"
-      >
-        Logout
-      </button>
-    </div>
-  </header>
+const API = "https://snakes-ladders-backend-github.onrender.com";
+const ADMIN_IDLE_MS = 5 * 60 * 1000; // 5 minutes
 
-  <!-- MAIN LAYOUT -->
-  <main class="main-wrapper main-admin-layout">
-    <!-- TOP ROW: AREA ROLLS + PRIZE SETTINGS SIDE BY SIDE -->
-    <section class="admin-top-row">
-      <!-- AREA ROLLS CARD -->
-      <section class="card card-admin">
-        <div class="card-header">
-          <h2>Area Rolls</h2>
-        </div>
+// ----- ELEMENTS -----
+const areaSelect = document.getElementById("adminArea");
 
-        <div class="card-body">
-          <div class="form-group">
-            <label for="adminArea">SW Area</label>
-            <select id="adminArea" class="input">
-              <option value="SW1">SW1</option>
-              <option value="SW2">SW2</option>
-              <option value="SW3">SW3</option>
-              <option value="SW4">SW4</option>
-              <option value="SW5">SW5</option>
-              <option value="SW6">SW6</option>
-              <option value="SW7">SW7</option>
-              <option value="SW8">SW8</option>
-              <option value="SW9">SW9</option>
-              <option value="SW10">SW10</option>
-              <option value="SW11">SW11</option>
-              <option value="SW12">SW12</option>
-              <option value="SW13">SW13</option>
-              <option value="SW14">SW14</option>
-              <option value="SW15">SW15</option>
-              <option value="SW16">SW16</option>
-              <option value="SW17">SW17</option>
-              <option value="SW18">SW18</option>
-              <option value="SW19">SW19</option>
-            </select>
-          </div>
+const playersTableBody = document.getElementById("playersTableBody");
+let playersAreaLabel = document.getElementById("playersAreaLabel");
+const selectAllCheckbox = document.getElementById("selectAllPlayers");
+const usersStatusEl = document.getElementById("usersStatus");
 
-          <div class="form-group">
-            <label for="grantCount">Extra rolls</label>
-            <input
-              id="grantCount"
-              class="input"
-              type="number"
-              min="1"
-              max="99"
-              value="10"
-            />
-          </div>
+const grantCountInput = document.getElementById("grantCount");
+const grantEveryoneBtn = document.getElementById("grantBtn");
+const grantSelectedBtn = document.getElementById("grantSelectedBtn");
+const undoGrantBtn = document.getElementById("undoGrantBtn");
 
-          <div class="button-group">
-            <button id="grantBtn" class="btn btn-primary">
-              Grant to all in area
-            </button>
-            <button id="grantSelectedBtn" class="btn btn-secondary">
-              Grant to selected players
-            </button>
-          </div>
+const prizeCountInput = document.getElementById("prizeCount");
+const prizeSaveBtn = document.getElementById("savePrizeBtn");
+const prizeStatusEl = document.getElementById("prizeStatus");
 
-          <button id="undoGrantBtn" class="btn btn-ghost">
-            Undo last grant
-          </button>
+const logoutBtn = document.getElementById("adminLogoutBtn");
 
-          <p class="helper-text">
-            Enter the number of extra rolls to grant. You can grant rolls to the
-            whole area or selected players only.
-          </p>
+// ----- HELPERS -----
+function showStatus(msg, isError = false) {
+  if (!usersStatusEl) return;
+  usersStatusEl.textContent = msg || "";
+  usersStatusEl.classList.remove("status-error", "status-ok");
 
-          <p id="usersStatus" class="status-text"></p>
-        </div>
-      </section>
+  if (!msg) return;
+  usersStatusEl.classList.add(isError ? "status-error" : "status-ok");
+}
 
-      <!-- PRIZE SETTINGS CARD -->
-      <section class="card card-admin">
-        <div class="card-header">
-          <h2>Prize Settings</h2>
-        </div>
+function showPrizeStatus(msg, isError = false) {
+  if (!prizeStatusEl) return;
+  prizeStatusEl.textContent = msg || "";
+  prizeStatusEl.classList.remove("status-error", "status-ok");
 
-        <div class="card-body">
-          <p class="helper-text">
-            Set how many £25 Champions Points prizes can be awarded at random in
-            this SW area.
-          </p>
+  if (!msg) return;
+  prizeStatusEl.classList.add(isError ? "status-error" : "status-ok");
+}
 
-          <div class="form-group">
-            <label for="prizeCount">Max £25 winners for this area</label>
-            <input
-              id="prizeCount"
-              class="input"
-              type="number"
-              min="0"
-              max="999"
-              value="0"
-            />
-          </div>
+function getSelectedArea() {
+  return areaSelect?.value || "SW1";
+}
 
-          <button id="savePrizeBtn" class="btn btn-primary">
-            Save prize settings
-          </button>
+// ----- AUTH / IDLE -----
+function ensureLoggedIn() {
+  const flag = localStorage.getItem("adminLoggedIn");
+  const last = parseInt(localStorage.getItem("adminLastActive") || "0", 10);
+  const now = Date.now();
 
-          <p id="prizeStatus" class="status-text"></p>
+  if (flag !== "yes" || !last || now - last > ADMIN_IDLE_MS) {
+    localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("adminLastActive");
+    window.location.href = "admin-login.html";
+    return false;
+  }
+  return true;
+}
 
-          <p class="helper-text">
-            Max £25 Champions Points prizes allowed in this area will be shown
-            above.<br />
-            All other winners will receive £10 Champions Points. Use this
-            setting to control how many £25 prizes are available in each area.
-          </p>
-        </div>
-      </section>
-    </section>
+function touchAdminActivity() {
+  if (localStorage.getItem("adminLoggedIn") === "yes") {
+    localStorage.setItem("adminLastActive", String(Date.now()));
+  }
+}
 
-    <!-- PLAYERS TABLE -->
-    <section class="card card-admin card-wide">
-      <div class="card-header">
-        <h2>Players in <span id="playersAreaLabel">SW1</span></h2>
-      </div>
+// ----- RENDERING -----
+function renderPlayers(players, area) {
+  if (!playersTableBody) return;
 
-      <div class="card-body">
-        <div class="table-wrapper">
-          <table class="table table-admin">
-            <thead>
-              <tr>
-                <th>
-                  <input type="checkbox" id="selectAllPlayers" />
-                </th>
-                <th>Email</th>
-                <th>Area</th>
-                <th>Position</th>
-                <th>Rolls used</th>
-                <th>Rolls granted</th>
-                <th>Completed</th>
-                <th>Reward</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="playersTableBody">
-              <!-- Filled by admin.js -->
-            </tbody>
-          </table>
-        </div>
+  playersTableBody.innerHTML = "";
+  if (playersAreaLabel) {
+    playersAreaLabel.textContent = area || getSelectedArea();
+  }
 
-        <p id="playersEmptyMessage" class="helper-text"></p>
-      </div>
-    </section>
-  </main>
+  if (!players || players.length === 0) {
+    const emptyRow = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.textContent = "No players found in this area yet.";
+    emptyRow.appendChild(td);
+    playersTableBody.appendChild(emptyRow);
+    return;
+  }
 
-  <script src="admin.js"></script>
-</body>
-</html>
+  for (const p of players) {
+    const tr = document.createElement("tr");
+
+    const selTd = document.createElement("td");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "player-select";
+    cb.dataset.email = p.email;
+    selTd.appendChild(cb);
+    tr.appendChild(selTd);
+
+    const emailTd = document.createElement("td");
+    emailTd.textContent = p.email;
+    tr.appendChild(emailTd);
+
+    const areaTd = document.createElement("td");
+    areaTd.textContent = p.area || "";
+    tr.appendChild(areaTd);
+
+    const posTd = document.createElement("td");
+    posTd.textContent = String(p.position ?? 0);
+    tr.appendChild(posTd);
+
+    const usedTd = document.createElement("td");
+    usedTd.textContent = String(p.rollsUsed ?? 0);
+    tr.appendChild(usedTd);
+
+    const grantedTd = document.createElement("td");
+    grantedTd.textContent = String(p.rollsGranted ?? 0);
+    tr.appendChild(grantedTd);
+
+    const completedTd = document.createElement("td");
+    completedTd.textContent = p.completed ? "Yes" : "No";
+    tr.appendChild(completedTd);
+
+    const rewardTd = document.createElement("td");
+    rewardTd.textContent = p.reward ? `£${p.reward}` : "—";
+    tr.appendChild(rewardTd);
+
+    const actionsTd = document.createElement("td");
+    const resetBtn = document.createElement("button");
+    resetBtn.textContent = "Reset";
+    resetBtn.className = "btn btn-small btn-secondary";
+    resetBtn.addEventListener("click", () => handleResetPlayer(p.email, p.area));
+    actionsTd.appendChild(resetBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "Delete";
+    deleteBtn.className = "btn btn-small btn-danger";
+    deleteBtn.addEventListener("click", () => handleDeletePlayer(p.email, p.area));
+    actionsTd.appendChild(deleteBtn);
+
+    tr.appendChild(actionsTd);
+
+    playersTableBody.appendChild(tr);
+  }
+}
+
+// ----- API CALLS -----
+async function loadPlayersForArea() {
+  if (!ensureLoggedIn()) return;
+
+  const area = getSelectedArea();
+  showStatus("Loading players...");
+
+  try {
+    const res = await fetch(
+      `${API}/admin/players?area=${encodeURIComponent(area)}`
+    );
+    if (!res.ok) {
+      showStatus("Failed to load players.", true);
+      return;
+    }
+    const data = await res.json();
+    renderPlayers(data.players || [], area);
+    showStatus("");
+  } catch (err) {
+    console.error("Load players error:", err);
+    showStatus("Server error.", true);
+  }
+}
+
+async function handleResetPlayer(email, area) {
+  if (!ensureLoggedIn()) return;
+  if (!confirm(`Reset progress for ${email}?`)) return;
+
+  try {
+    const res = await fetch(`${API}/admin/reset-player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, area }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showStatus(data.error || "Failed to reset player.", true);
+      return;
+    }
+
+    showStatus("Player reset.");
+    await loadPlayersForArea();
+  } catch (err) {
+    console.error("Reset player error:", err);
+    showStatus("Server error.", true);
+  }
+}
+
+async function handleDeletePlayer(email, area) {
+  if (!ensureLoggedIn()) return;
+  if (!confirm(`Delete player ${email} from ${area}?`)) return;
+
+  try {
+    const res = await fetch(`${API}/admin/delete-player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, area }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showStatus(data.error || "Failed to delete player.", true);
+      return;
+    }
+
+    showStatus("Player deleted.");
+    await loadPlayersForArea();
+  } catch (err) {
+    console.error("Delete player error:", err);
+    showStatus("Server error.", true);
+  }
+}
+
+function getSelectedPlayerEmails() {
+  const checkboxes = document.querySelectorAll(".player-select");
+  const list = [];
+  checkboxes.forEach((cb) => {
+    if (cb.checked && cb.dataset.email) {
+      list.push(cb.dataset.email);
+    }
+  });
+  return list;
+}
+
+async function handleGrantRolls(onlySelected) {
+  if (!ensureLoggedIn()) return;
+
+  const area = getSelectedArea();
+  const count = parseInt(grantCountInput?.value || "0", 10);
+  if (!Number.isInteger(count) || count <= 0) {
+    showStatus("Enter a positive number of extra rolls.", true);
+    return;
+  }
+
+  let emails = [];
+  if (onlySelected) {
+    emails = getSelectedPlayerEmails();
+    if (emails.length === 0) {
+      showStatus("Select at least one player.", true);
+      return;
+    }
+  }
+
+  showStatus("Granting rolls...");
+
+  try {
+    const res = await fetch(`${API}/admin/grant-rolls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        adminUsername: localStorage.getItem("adminUsername") || "admin",
+        area,
+        extraRolls: count,
+        emails,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showStatus(data.error || "Failed to grant rolls.", true);
+      return;
+    }
+
+    showStatus("Rolls granted successfully.");
+    await loadPlayersForArea();
+  } catch (err) {
+    console.error("Grant rolls error:", err);
+    showStatus("Server error.", true);
+  }
+}
+
+async function handleUndoGrant() {
+  if (!ensureLoggedIn()) return;
+
+  const area = getSelectedArea();
+  if (!confirm(`Undo the last grant in ${area}?`)) return;
+
+  showStatus("Undoing last grant...");
+
+  try {
+    const res = await fetch(`${API}/admin/undo-last-grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showStatus(data.error || "Failed to undo last grant.", true);
+      return;
+    }
+
+    showStatus("Last grant undone.");
+    await loadPlayersForArea();
+  } catch (err) {
+    console.error("Undo grant error:", err);
+    showStatus("Server error.", true);
+  }
+}
+
+async function loadPrizeConfig() {
+  if (!ensureLoggedIn()) return;
+
+  const area = getSelectedArea();
+  showPrizeStatus("Loading prize settings...");
+
+  try {
+    const res = await fetch(
+      `${API}/admin/prize-config?area=${encodeURIComponent(area)}`
+    );
+    if (!res.ok) {
+      showPrizeStatus("Failed to load prize settings.", true);
+      return;
+    }
+    const data = await res.json();
+    const winners = data.winners ?? 0;
+    if (prizeCountInput) {
+      prizeCountInput.value = String(winners);
+    }
+    showPrizeStatus(`Max £25 Champions Points prizes allowed in ${area}: ${winners}.`);
+  } catch (err) {
+    console.error("Load prize config error:", err);
+    showPrizeStatus("Server error.", true);
+  }
+}
+
+async function savePrizeConfig() {
+  if (!ensureLoggedIn()) return;
+
+  const area = getSelectedArea();
+  const winners = parseInt(prizeCountInput?.value || "0", 10);
+
+  if (!Number.isInteger(winners) || winners < 0) {
+    showPrizeStatus("Enter a valid non-negative number.", true);
+    return;
+  }
+
+  showPrizeStatus("Saving prize settings...");
+
+  try {
+    const res = await fetch(`${API}/admin/prize-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area, winners }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showPrizeStatus(data.error || "Failed to save prize settings.", true);
+      return;
+    }
+
+    showPrizeStatus(
+      `Max £25 Champions Points prizes allowed in ${area}: ${winners}.`
+    );
+  } catch (err) {
+    console.error("Save prize config error:", err);
+    showPrizeStatus("Server error.", true);
+  }
+}
+
+function handleSelectAllToggle() {
+  const checked = !!selectAllCheckbox?.checked;
+  document
+    .querySelectorAll(".player-select")
+    .forEach((cb) => (cb.checked = checked));
+}
+
+// ----- INIT -----
+function initAdmin() {
+  ensureLoggedIn();
+
+  setInterval(ensureLoggedIn, 60 * 1000);
+
+  window.addEventListener("mousemove", touchAdminActivity);
+  window.addEventListener("keydown", touchAdminActivity);
+  window.addEventListener("click", touchAdminActivity);
+
+  logoutBtn?.addEventListener("click", () => {
+    localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("adminLastActive");
+    window.location.href = "admin-login.html";
+  });
+
+  areaSelect?.addEventListener("change", () => {
+    loadPlayersForArea();
+    loadPrizeConfig();
+  });
+
+  grantEveryoneBtn?.addEventListener("click", () => handleGrantRolls(false));
+  grantSelectedBtn?.addEventListener("click", () => handleGrantRolls(true));
+  undoGrantBtn?.addEventListener("click", handleUndoGrant);
+
+  prizeSaveBtn?.addEventListener("click", savePrizeConfig);
+
+  selectAllCheckbox?.addEventListener("change", handleSelectAllToggle);
+
+  if (getSelectedArea()) {
+    loadPlayersForArea();
+    loadPrizeConfig();
+  } else {
+    showStatus("Select an area to view players and prize settings.");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initAdmin);
