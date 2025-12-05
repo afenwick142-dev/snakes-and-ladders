@@ -21,20 +21,20 @@ function showAdminMessage(msg, isError = true) {
 }
 
 async function handleAdminLogin(e) {
-  e.preventDefault();
-  showAdminMessage("");
+  e?.preventDefault?.();
 
   const username = (usernameInput?.value || "").trim();
   const password = (passwordInput?.value || "").trim();
 
   if (!username || !password) {
-    showAdminMessage("Please enter both username and password.");
+    showAdminMessage("Enter both username and password.");
     return;
   }
 
-  if (loginButton) loginButton.disabled = true;
-
   try {
+    if (loginButton) loginButton.disabled = true;
+    showAdminMessage("Checking credentials...", false);
+
     const res = await fetch(`${API}/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -57,6 +57,7 @@ async function handleAdminLogin(e) {
     // success
     localStorage.setItem("adminLoggedIn", "yes");
     localStorage.setItem("adminLastActive", String(Date.now()));
+    localStorage.setItem("adminUsername", username);
     showAdminMessage("Login successful. Redirecting…", false);
 
     window.location.href = "admin.html";
