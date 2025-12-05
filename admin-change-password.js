@@ -1,4 +1,5 @@
 // admin-change-password.js
+// Allows the single admin user to change their password.
 
 const API = "https://snakes-ladders-backend-github.onrender.com";
 
@@ -8,22 +9,31 @@ const changeBtn = document.getElementById("changePwBtn");
 const changeError = document.getElementById("changePwError");
 
 changeBtn?.addEventListener("click", async () => {
-  const c = (currentPw?.value || "").trim();
-  const n = (newPw?.value || "").trim();
+  const current = (currentPw?.value || "").trim();
+  const updated = (newPw?.value || "").trim();
 
-  if (!c || !n) {
+  if (!current || !updated) {
     if (changeError) changeError.textContent = "Enter both passwords.";
     return;
   }
+
+  if (updated.length < 6) {
+    if (changeError) {
+      changeError.textContent =
+        "New password should be at least 6 characters.";
+    }
+    return;
+  }
+
+  if (changeError) changeError.textContent = "Updating password…";
 
   try {
     const res = await fetch(`${API}/admin/change-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: "admin",
-        oldPassword: c,
-        newPassword: n,
+        oldPassword: current,
+        newPassword: updated,
       }),
     });
 
@@ -31,17 +41,18 @@ changeBtn?.addEventListener("click", async () => {
     try {
       data = await res.json();
     } catch {
-      // ignore JSON parse failure
+      data = {};
     }
 
-    if (!res.ok || !data.success) {
-      if (changeError)
-        changeError.textContent = data.error || "Failed to change password.";
+    if (!res.ok || data.success !== true) {
+      if (changeError) {
+        changeError.textContent =
+          data.error || "Failed to change password.";
+      }
       return;
     }
 
-    alert("Password changed successfully.");
-    // force fresh login with new password
+    alert("Password changed successfully. Please log in again.");
     localStorage.removeItem("adminLoggedIn");
     localStorage.removeItem("adminLastActive");
     window.location.href = "admin-login.html";
