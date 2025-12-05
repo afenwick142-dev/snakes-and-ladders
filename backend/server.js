@@ -1,439 +1,130 @@
-// server.js
-// --- Snakes & Ladders Backend ---
-// Complete backend for Anthony Fenwick
-// - Auto-creates all required tables
-// - Player register/login/state/roll
-// - Admin login/password change
-// - Admin roll granting + prize settings + undo
-// - Player reset & delete
-// - Designed to work with EdgeOne frontend calling this backend.
+// backend/server.js
+// Node/Express backend for Snakes & Ladders
 
 const express = require("express");
 const cors = require("cors");
-const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
+const { Pool } = require("pg");
 
-// -----------------------------------------------------------------------------
-// APP SETUP
-// -----------------------------------------------------------------------------
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// -----------------------------------------------------------------------------
-// DATABASE CONNECTION
-// -----------------------------------------------------------------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl:
-    process.env.DATABASE_SSL === "false"
+    process.env.DB_SSL === "false"
       ? false
-      : {
-          rejectUnauthorized: false,
-        },
+      : { rejectUnauthorized: false },
 });
 
 // -----------------------------------------------------------------------------
 // HELPERS
 // -----------------------------------------------------------------------------
 function normaliseEmail(email) {
-  return (email || "").trim().toLowerCase();
+  if (!email) return "";
+  return String(email).trim().toLowerCase();
 }
 
 function normaliseArea(area) {
-  return (area || "").trim().toUpperCase();
+  if (!area) return "";
+  return String(area).trim().toUpperCase();
 }
 
-// Board constants
 const FINAL_SQUARE = 30;
-const JUMPS = {
-  3: 22,
-  5: 8,
-  11: 26,
-  20: 29,
-  17: 4,
-  19: 7,
-  21: 9, // NEW snake
-  27: 1,
-};
-
-function applyBoardJump(position) {
-  return JUMPS[position] || position;
-}
-
-// Initialise DB: create tables & default admin user if needed
-async function initDatabase() {
-  // players table
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS players (
-      email TEXT NOT NULL,
-      area TEXT NOT NULL,
-      position INTEGER NOT NULL DEFAULT 0,
-      rolls_used INTEGER NOT NULL DEFAULT 0,
-      rolls_granted INTEGER NOT NULL DEFAULT 0,
-      completed BOOLEAN NOT NULL DEFAULT false,
-      reward INTEGER,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (email, area)
-    );
-  `);
-
-  // admin_users table
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_users (
-      id SERIAL PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  // prize_config table
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS prize_config (
-      area TEXT PRIMARY KEY,
-      winners INTEGER NOT NULL DEFAULT 0,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  // grant_history table (for undo last grant)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS grant_history (
-      id SERIAL PRIMARY KEY,
-      admin_username TEXT NOT NULL,
-      area TEXT NOT NULL,
-      emails TEXT[] NOT NULL,
-      rolls_granted INTEGER NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  // ensure default admin user
-  const adminRes = await pool.query(
-    "SELECT * FROM admin_users WHERE username = $1",
-    ["admin"]
-  );
-  if (adminRes.rows.length === 0) {
-    const passwordHash = await bcrypt.hash("Admin123!", 10);
-    await pool.query(
-      "INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)",
-      ["admin", passwordHash]
-    );
-    console.log("Default admin user created with password Admin123!");
-  }
-
-  // ensure SW1–SW19 prize config rows exist
-  for (let i = 1; i <= 19; i++) {
-    const area = `SW${i}`;
-    const configRes = await pool.query(
-      "SELECT * FROM prize_config WHERE area = $1",
-      [area]
-    );
-    if (configRes.rows.length === 0) {
-      await pool.query(
-        "INSERT INTO prize_config (area, winners) VALUES ($1, $2)",
-        [area, 0]
-      );
-    }
-  }
-}
-
-// Run DB init
-initDatabase().catch((err) => {
-  console.error("Error initialising database:", err);
-  process.exit(1);
-});
 
 // -----------------------------------------------------------------------------
-// PLAYER ROUTES
+// DB INIT
 // -----------------------------------------------------------------------------
-
-// Register a player (idempotent)
-app.post("/player/register", async (req, res) => {
-  try {
-    let { email, area } = req.body;
-    email = normaliseEmail(email);
-    area = normaliseArea(area);
-
-    if (!email || !area) {
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
-    // Upsert style: if not exists, create with 6 rolls granted, 0 used.
-    await pool.query(
-      `
-      INSERT INTO players (email, area, position, rolls_used, rolls_granted, completed, reward)
-      VALUES ($1, $2, 0, 0, 6, false, NULL)
-      ON CONFLICT (email, area)
-      DO NOTHING
-      `,
-      [email, area]
-    );
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Player register error:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
-
-// Player login check
-app.post("/player/login", async (req, res) => {
-  try {
-    let { email, area } = req.body;
-    email = normaliseEmail(email);
-    area = normaliseArea(area);
-
-    if (!email || !area) {
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
-    const result = await pool.query(
-      "SELECT * FROM players WHERE email = $1 AND area = $2",
-      [email, area]
-    );
-
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "Player not found. You may need to register first." });
-    }
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Player login error:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
-
-// Get player state
-app.get("/player/state", async (req, res) => {
-  try {
-    let email = normaliseEmail(req.query.email);
-    let area = normaliseArea(req.query.area);
-
-    if (!email || !area) {
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
-    const result = await pool.query(
-      "SELECT * FROM players WHERE email = $1 AND area = $2",
-      [email, area]
-    );
-
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "Player not found. You may need to register first." });
-    }
-
-    const row = result.rows[0];
-    const availableRolls =
-      (row.rolls_granted || 0) - (row.rolls_used || 0);
-
-    return res.json({
-      position: row.position,
-      rollsUsed: row.rolls_used,
-      rollsGranted: row.rolls_granted,
-      availableRolls,
-      completed: row.completed,
-      reward: row.reward,
-    });
-  } catch (err) {
-    console.error("Get player state error:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
-
-// Player rolls dice + move
-app.post("/player/roll", async (req, res) => {
+async function initDb() {
   const client = await pool.connect();
   try {
-    let { email, area } = req.body;
-    email = normaliseEmail(email);
-    area = normaliseArea(area);
-
-    if (!email || !area) {
-      client.release();
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
     await client.query("BEGIN");
 
-    const result = await client.query(
-      "SELECT * FROM players WHERE email = $1 AND area = $2 FOR UPDATE",
-      [email, area]
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS players (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        area TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        rolls_used INTEGER NOT NULL DEFAULT 0,
+        rolls_granted INTEGER NOT NULL DEFAULT 0,
+        completed BOOLEAN NOT NULL DEFAULT FALSE,
+        reward INTEGER,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_players_email_area
+      ON players (email, area);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS grant_history (
+        id SERIAL PRIMARY KEY,
+        admin_username TEXT NOT NULL,
+        area TEXT NOT NULL,
+        emails TEXT[] NOT NULL,
+        rolls_granted INTEGER NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS prize_config (
+        id SERIAL PRIMARY KEY,
+        area TEXT UNIQUE NOT NULL,
+        winners INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+
+    const adminRes = await client.query(
+      "SELECT * FROM admin_users WHERE username = $1",
+      ["admin"]
     );
-
-    if (result.rows.length === 0) {
-      await client.query("ROLLBACK");
-      client.release();
-      return res
-        .status(404)
-        .json({ error: "Player not found. You may need to register first." });
+    if (adminRes.rows.length === 0) {
+      const defaultPassword = process.env.ADMIN_DEFAULT_PASSWORD || "Snakes2025";
+      const hash = await bcrypt.hash(defaultPassword, 10);
+      await client.query(
+        "INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)",
+        ["admin", hash]
+      );
+      console.log("Created default admin user with username 'admin'.");
     }
 
-    const player = result.rows[0];
-
-    if (player.completed) {
-      await client.query("ROLLBACK");
-      client.release();
-      return res.status(400).json({ error: "Game already completed." });
-    }
-
-    const availableRolls =
-      (player.rolls_granted || 0) - (player.rolls_used || 0);
-    if (availableRolls <= 0) {
-      await client.query("ROLLBACK");
-      client.release();
-      return res.status(400).json({ error: "No rolls remaining." });
-    }
-
-    // Roll dice 1–6 with guaranteed finish on final roll
-    const totalGranted = player.rolls_granted || 0;
-    const usedSoFar = player.rolls_used || 0;
-    const remainingRolls = totalGranted - usedSoFar;
-
-    const fromPosition = player.position || 0;
-    const squaresToFinish = FINAL_SQUARE - fromPosition;
-
-    let dice;
-    if (remainingRolls === 1 && squaresToFinish >= 1 && squaresToFinish <= 6) {
-      // Last available roll and within reach: force exact number to finish
-      dice = squaresToFinish;
-    } else {
-      dice = Math.floor(Math.random() * 6) + 1;
-    }
-
-    let newPosition = fromPosition + dice;
-    if (newPosition > FINAL_SQUARE) {
-      newPosition = FINAL_SQUARE;
-    }
-    newPosition = applyBoardJump(newPosition);
-
-    let completed = player.completed;
-    let reward = player.reward;
-
-    if (!completed && newPosition >= FINAL_SQUARE) {
-      completed = true;
-
-      // Determine reward 10 or 25 based on prize_config
-      // Default = 10
-      let finalReward = 10;
-      const areaConfig = await client.query(
-        "SELECT winners FROM prize_config WHERE area = $1",
+    for (let i = 1; i <= 19; i++) {
+      const area = `SW${i}`;
+      const configRes = await client.query(
+        "SELECT * FROM prize_config WHERE area = $1",
         [area]
       );
-      if (areaConfig.rows.length > 0) {
-        const max25 = areaConfig.rows[0].winners || 0;
-        if (max25 > 0) {
-          const used25 = await client.query(
-            "SELECT COUNT(*) FROM players WHERE area = $1 AND reward = 25",
-            [area]
-          );
-          const usedCount = parseInt(used25.rows[0].count, 10) || 0;
-          if (usedCount < max25) {
-            finalReward = 25;
-          }
-        }
+      if (configRes.rows.length === 0) {
+        await client.query(
+          "INSERT INTO prize_config (area, winners) VALUES ($1, $2)",
+          [area, 0]
+        );
       }
-      reward = finalReward;
     }
-
-    const updated = await client.query(
-      `
-      UPDATE players
-      SET position = $1,
-          rolls_used = rolls_used + 1,
-          completed = $2,
-          reward = $3
-      WHERE email = $4 AND area = $5
-      RETURNING position, rolls_used, rolls_granted, completed, reward
-      `,
-      [newPosition, completed, reward, email, area]
-    );
 
     await client.query("COMMIT");
-    client.release();
-
-    const row = updated.rows[0];
-    const remaining = Math.max(
-      0,
-      (row.rolls_granted || 0) - (row.rolls_used || 0)
-    );
-
-    return res.json({
-      success: true,
-      dice,
-      fromPosition,
-      position: row.position,
-      rollsUsed: row.rolls_used,
-      rollsGranted: row.rolls_granted,
-      remainingRolls: remaining,
-      completed: row.completed,
-      reward: row.reward,
-    });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    console.error("DB init error:", err);
+  } finally {
     client.release();
-    console.error("Player roll error:", err);
-    return res.status(500).json({ error: "Server error." });
   }
-});
+}
 
-// Reset a player's progress in a given area
-app.post("/player/reset", async (req, res) => {
-  try {
-    let { email, area } = req.body;
-    email = normaliseEmail(email);
-    area = normaliseArea(area);
-
-    if (!email || !area) {
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
-    await pool.query(
-      `
-      UPDATE players
-      SET position = 0,
-          rolls_used = 0,
-          completed = false,
-          reward = NULL
-      WHERE email = $1 AND area = $2
-      `,
-      [email, area]
-    );
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Player reset error:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
-
-// Delete a player (for admin use mostly)
-app.post("/player/delete", async (req, res) => {
-  try {
-    let { email, area } = req.body;
-    email = normaliseEmail(email);
-    area = normaliseArea(area);
-
-    if (!email || !area) {
-      return res.status(400).json({ error: "Email and area are required." });
-    }
-
-    await pool.query("DELETE FROM players WHERE email = $1 AND area = $2", [
-      email,
-      area,
-    ]);
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Player delete error:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
+initDb().catch((err) => console.error("initDb failed:", err));
 
 // -----------------------------------------------------------------------------
 // ADMIN AUTH
@@ -464,10 +155,11 @@ app.post("/admin/login", async (req, res) => {
 
 app.post("/admin/change-password", async (req, res) => {
   try {
-    const { username, oldPassword, newPassword } = req.body;
+    const { oldPassword, newPassword } = req.body;
+
     const userRes = await pool.query(
       "SELECT * FROM admin_users WHERE username = $1",
-      [username]
+      ["admin"]
     );
     if (userRes.rows.length === 0) {
       return res.status(401).json({ error: "Invalid username or password." });
@@ -493,20 +185,239 @@ app.post("/admin/change-password", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
+// PLAYER ENDPOINTS
+// -----------------------------------------------------------------------------
+app.post("/player/register", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    if (!email || !area) {
+      client.release();
+      return res.status(400).json({ error: "Email and area are required." });
+    }
+
+    const existing = await client.query(
+      "SELECT * FROM players WHERE email = $1 AND area = $2",
+      [email, area]
+    );
+    if (existing.rows.length > 0) {
+      client.release();
+      return res.json({ success: true, player: existing.rows[0] });
+    }
+
+    const inserted = await client.query(
+      `
+      INSERT INTO players (email, area, position, rolls_used, rolls_granted, completed)
+      VALUES ($1, $2, 0, 0, 6, FALSE)
+      RETURNING *
+      `,
+      [email, area]
+    );
+
+    client.release();
+    return res.json({ success: true, player: inserted.rows[0] });
+  } catch (err) {
+    client.release();
+    console.error("Player register error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+function applyBoardJump(pos) {
+  const snakes = {
+    17: 4,
+    19: 7,
+    27: 1,
+    21: 9, // extra snake you mentioned
+  };
+
+  const ladders = {
+    3: 22,
+    5: 8,
+    11: 26,
+    20: 29,
+  };
+
+  if (ladders[pos]) return ladders[pos];
+  if (snakes[pos]) return snakes[pos];
+  return pos;
+}
+
+app.post("/player/roll", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    if (!email || !area) {
+      client.release();
+      return res.status(400).json({ error: "Email and area are required." });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      "SELECT * FROM players WHERE email = $1 AND area = $2 FOR UPDATE",
+      [email, area]
+    );
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(404).json({ error: "Player not found." });
+    }
+
+    const player = result.rows[0];
+    const totalRollsAllowed = player.rolls_granted;
+    const rollsUsed = player.rolls_used;
+
+    if (player.completed) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(400).json({ error: "Game already completed." });
+    }
+
+    const remainingRolls = totalRollsAllowed - rollsUsed;
+    if (remainingRolls <= 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(400).json({ error: "No rolls remaining." });
+    }
+
+    const fromPosition = player.position || 0;
+    const squaresToFinish = FINAL_SQUARE - fromPosition;
+
+    let dice;
+    if (remainingRolls === 1 && squaresToFinish >= 1 && squaresToFinish <= 6) {
+      dice = squaresToFinish;
+    } else {
+      dice = Math.floor(Math.random() * 6) + 1;
+    }
+
+    let newPosition = fromPosition + dice;
+    if (newPosition > FINAL_SQUARE) {
+      newPosition = FINAL_SQUARE;
+    }
+    newPosition = applyBoardJump(newPosition);
+
+    let completed = player.completed;
+    let reward = player.reward;
+
+    if (!completed && newPosition >= FINAL_SQUARE) {
+      completed = true;
+
+      // Determine reward 10 or 25 based on prize_config
+      let finalReward = 10;
+      const areaConfig = await client.query(
+        "SELECT winners FROM prize_config WHERE area = $1",
+        [area]
+      );
+      if (areaConfig.rows.length > 0) {
+        const max25 = areaConfig.rows[0].winners || 0;
+        if (max25 > 0) {
+          const used25 = await client.query(
+            "SELECT COUNT(*) FROM players WHERE area = $1 AND reward = 25",
+            [area]
+          );
+          const usedCount = parseInt(used25.rows[0].count, 10) || 0;
+          const remaining25 = max25 - usedCount;
+
+          if (remaining25 > 0) {
+            const chance = 0.5; // 50% chance while prizes remain
+            if (Math.random() < chance) {
+              finalReward = 25;
+            }
+          }
+        }
+      }
+      reward = finalReward;
+    }
+
+    const updated = await client.query(
+      `
+      UPDATE players
+      SET position = $1,
+          rolls_used = rolls_used + 1,
+          completed = $2,
+          reward = $3
+      WHERE id = $4
+      RETURNING *
+      `,
+      [newPosition, completed, reward, player.id]
+    );
+
+    await client.query("COMMIT");
+    client.release();
+
+    const row = updated.rows[0];
+    const remaining = row.rolls_granted - row.rolls_used;
+
+    return res.json({
+      success: true,
+      dice,
+      position: row.position,
+      rollsUsed: row.rolls_used,
+      rollsGranted: row.rolls_granted,
+      remainingRolls: remaining,
+      completed: row.completed,
+      reward: row.reward,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    client.release();
+    console.error("Player roll error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+app.post("/player/reset", async (req, res) => {
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    await pool.query(
+      `
+      UPDATE players
+      SET position = 0,
+          rolls_used = 0,
+          completed = FALSE,
+          reward = NULL
+      WHERE email = $1 AND area = $2
+      `,
+      [email, area]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Player reset error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+// -----------------------------------------------------------------------------
 // ADMIN: PLAYERS & ROLLS
 // -----------------------------------------------------------------------------
-
-// List players by area
 app.get("/admin/players", async (req, res) => {
   try {
-    const area = normaliseArea(req.query.area);
+    const area = normaliseArea(req.query.area || "");
     if (!area) {
       return res.status(400).json({ error: "Area is required." });
     }
 
     const result = await pool.query(
       `
-      SELECT email, area, position, rolls_used, rolls_granted, completed, reward
+      SELECT
+        email,
+        area,
+        position,
+        rolls_used AS "rollsUsed",
+        rolls_granted AS "rollsGranted",
+        completed,
+        reward
       FROM players
       WHERE area = $1
       ORDER BY email ASC
@@ -514,21 +425,63 @@ app.get("/admin/players", async (req, res) => {
       [area]
     );
 
-    return res.json({ players: result.rows });
+    return res.json({ success: true, players: result.rows });
   } catch (err) {
-    console.error("Admin get players error:", err);
+    console.error("Admin list players error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// Grant rolls to all in area or selected list
+app.post("/admin/reset-player", async (req, res) => {
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    await pool.query(
+      `
+      UPDATE players
+      SET position = 0,
+          rolls_used = 0,
+          completed = FALSE,
+          reward = NULL
+      WHERE email = $1 AND area = $2
+      `,
+      [email, area]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Admin reset-player error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
+app.post("/admin/delete-player", async (req, res) => {
+  try {
+    let { email, area } = req.body;
+    email = normaliseEmail(email);
+    area = normaliseArea(area);
+
+    await pool.query(
+      "DELETE FROM players WHERE email = $1 AND area = $2",
+      [email, area]
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Admin delete-player error:", err);
+    return res.status(500).json({ error: "Server error." });
+  }
+});
+
 app.post("/admin/grant-rolls", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { adminUsername, area, extraRolls, emails } = req.body;
+    let { adminUsername, area, extraRolls, emails } = req.body;
     const normArea = normaliseArea(area);
+    const rolls = parseInt(extraRolls, 10);
 
-    if (!normArea || !extraRolls || extraRolls <= 0) {
+    if (!normArea || !Number.isInteger(rolls) || rolls <= 0) {
       client.release();
       return res
         .status(400)
@@ -540,30 +493,37 @@ app.post("/admin/grant-rolls", async (req, res) => {
     let updatedEmails = [];
 
     if (Array.isArray(emails) && emails.length > 0) {
-      // Grant to selected players
-      const normEmails = emails.map(normaliseEmail);
-      const result = await client.query(
+      const normEmails = emails.map((e) => normaliseEmail(e)).filter(Boolean);
+
+      if (normEmails.length === 0) {
+        await client.query("ROLLBACK").catch(() => {});
+        client.release();
+        return res
+          .status(400)
+          .json({ error: "No valid player emails were provided." });
+      }
+
+      const updateRes = await client.query(
         `
         UPDATE players
         SET rolls_granted = rolls_granted + $1
         WHERE area = $2 AND email = ANY($3::text[])
         RETURNING email
         `,
-        [extraRolls, normArea, normEmails]
+        [rolls, normArea, normEmails]
       );
-      updatedEmails = result.rows.map((r) => r.email);
+      updatedEmails = updateRes.rows.map((r) => r.email);
     } else {
-      // Grant to all players in area
-      const result = await client.query(
+      const updateRes = await client.query(
         `
         UPDATE players
         SET rolls_granted = rolls_granted + $1
         WHERE area = $2
         RETURNING email
         `,
-        [extraRolls, normArea]
+        [rolls, normArea]
       );
-      updatedEmails = result.rows.map((r) => r.email);
+      updatedEmails = updateRes.rows.map((r) => r.email);
     }
 
     if (updatedEmails.length > 0) {
@@ -572,7 +532,7 @@ app.post("/admin/grant-rolls", async (req, res) => {
         INSERT INTO grant_history (admin_username, area, emails, rolls_granted)
         VALUES ($1, $2, $3, $4)
         `,
-        [adminUsername || "admin", normArea, updatedEmails, extraRolls]
+        [adminUsername || "admin", normArea, updatedEmails, rolls]
       );
     }
 
@@ -602,9 +562,10 @@ app.post("/admin/undo-last-grant", async (req, res) => {
 
     await client.query("BEGIN");
 
-    const lastGrantRes = await client.query(
+    const lastGrant = await client.query(
       `
-      SELECT * FROM grant_history
+      SELECT *
+      FROM grant_history
       WHERE area = $1
       ORDER BY created_at DESC
       LIMIT 1
@@ -612,25 +573,29 @@ app.post("/admin/undo-last-grant", async (req, res) => {
       [normArea]
     );
 
-    if (lastGrantRes.rows.length === 0) {
+    if (lastGrant.rows.length === 0) {
       await client.query("ROLLBACK");
       client.release();
-      return res.status(404).json({ error: "No previous grant found for this area." });
+      return res
+        .status(400)
+        .json({ error: "No grant history found for this area." });
     }
 
-    const lastGrant = lastGrantRes.rows[0];
+    const record = lastGrant.rows[0];
+    const emails = record.emails;
+    const rolls = record.rolls_granted;
 
     await client.query(
       `
       UPDATE players
-      SET rolls_granted = GREATEST(0, rolls_granted - $1)
+      SET rolls_granted = GREATEST(rolls_granted - $1, 0)
       WHERE area = $2 AND email = ANY($3::text[])
       `,
-      [lastGrant.rolls_granted, normArea, lastGrant.emails]
+      [rolls, normArea, emails]
     );
 
     await client.query("DELETE FROM grant_history WHERE id = $1", [
-      lastGrant.id,
+      record.id,
     ]);
 
     await client.query("COMMIT");
@@ -646,39 +611,36 @@ app.post("/admin/undo-last-grant", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// ADMIN: PRIZE CONFIG
+// PRIZE CONFIG
 // -----------------------------------------------------------------------------
-
-// Get prize config for an area
 app.get("/admin/prize-config", async (req, res) => {
   try {
-    const area = normaliseArea(req.query.area);
+    const area = normaliseArea(req.query.area || "");
     if (!area) {
       return res.status(400).json({ error: "Area is required." });
     }
 
     const result = await pool.query(
-      "SELECT area, winners FROM prize_config WHERE area = $1",
+      "SELECT winners FROM prize_config WHERE area = $1",
       [area]
     );
-    if (result.rows.length === 0) {
-      return res.json({ area, winners: 0 });
-    }
+    const winners =
+      result.rows.length > 0 ? result.rows[0].winners || 0 : 0;
 
-    return res.json(result.rows[0]);
+    return res.json({ success: true, winners });
   } catch (err) {
-    console.error("Admin get prize-config error:", err);
+    console.error("Admin prize-config GET error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
 
-// Set prize config (max £25 winners) for an area
 app.post("/admin/prize-config", async (req, res) => {
   try {
-    const area = normaliseArea(req.body.area);
-    const winners = parseInt(req.body.winners, 10);
+    const { area, winners } = req.body;
+    const normArea = normaliseArea(area);
+    const w = parseInt(winners, 10);
 
-    if (!area || isNaN(winners) || winners < 0) {
+    if (!normArea || !Number.isInteger(w) || w < 0) {
       return res
         .status(400)
         .json({ error: "Area and a non-negative winners value are required." });
@@ -691,12 +653,12 @@ app.post("/admin/prize-config", async (req, res) => {
       ON CONFLICT (area)
       DO UPDATE SET winners = EXCLUDED.winners
       `,
-      [area, winners]
+      [normArea, w]
     );
 
     return res.json({ success: true });
   } catch (err) {
-    console.error("Admin set prize-config error:", err);
+    console.error("Admin prize-config POST error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 });
@@ -704,8 +666,7 @@ app.post("/admin/prize-config", async (req, res) => {
 // -----------------------------------------------------------------------------
 // SERVER START
 // -----------------------------------------------------------------------------
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`Snakes & Ladders backend running on port ${PORT}`);
+  console.log(`Snakes & Ladders backend listening on port ${PORT}`);
 });
-
