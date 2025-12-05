@@ -19,15 +19,22 @@
 
     <div class="top-right">
       <a href="game.html" class="ghost-button">Back to game</a>
+      <button
+        id="adminLogoutBtn"
+        class="btn btn-secondary btn-small"
+        style="margin-left: 12px;"
+      >
+        Logout
+      </button>
     </div>
   </header>
 
   <!-- MAIN LAYOUT -->
   <main class="main-wrapper main-admin-layout">
     <!-- TOP ROW: AREA ROLLS + PRIZE SETTINGS SIDE BY SIDE -->
-    <div class="admin-controls-grid">
-      <!-- AREA ROLLS PANEL -->
-      <section class="card">
+    <section class="admin-top-row">
+      <!-- AREA ROLLS CARD -->
+      <section class="card card-admin">
         <div class="card-header">
           <h2>Area Rolls</h2>
         </div>
@@ -61,52 +68,58 @@
           <div class="form-group">
             <label for="grantCount">Extra rolls</label>
             <input
-              type="number"
               id="grantCount"
               class="input"
-              placeholder="e.g. 1, 2, 3..."
-              min="0"
+              type="number"
+              min="1"
+              max="99"
+              value="10"
             />
           </div>
 
-          <div class="button-row">
+          <div class="button-group">
             <button id="grantBtn" class="btn btn-primary">
               Grant to all in area
             </button>
             <button id="grantSelectedBtn" class="btn btn-secondary">
               Grant to selected players
             </button>
-            <button id="undoGrantBtn" class="btn btn-ghost">
-              Undo last grant
-            </button>
           </div>
+
+          <button id="undoGrantBtn" class="btn btn-ghost">
+            Undo last grant
+          </button>
 
           <p class="helper-text">
             Enter the number of extra rolls to grant. You can grant rolls to the
             whole area or selected players only.
           </p>
+
+          <p id="usersStatus" class="status-text"></p>
         </div>
       </section>
 
-      <!-- PRIZE SETTINGS PANEL -->
-      <section class="card">
+      <!-- PRIZE SETTINGS CARD -->
+      <section class="card card-admin">
         <div class="card-header">
           <h2>Prize Settings</h2>
         </div>
 
         <div class="card-body">
-          <p>
-            Set how many £25 Champions Points prizes can be awarded at random in this SW area.
+          <p class="helper-text">
+            Set how many £25 Champions Points prizes can be awarded at random in
+            this SW area.
           </p>
 
           <div class="form-group">
             <label for="prizeCount">Max £25 winners for this area</label>
             <input
-              type="number"
               id="prizeCount"
               class="input"
-              placeholder="e.g. 10"
+              type="number"
               min="0"
+              max="999"
+              value="0"
             />
           </div>
 
@@ -114,25 +127,27 @@
             Save prize settings
           </button>
 
-          <p id="prizeStatus" class="status"></p>
+          <p id="prizeStatus" class="status-text"></p>
 
           <p class="helper-text">
-            All other winners will receive £10 Champions Points. Use this setting to control how many £25 prizes are available in each area.
+            Max £25 Champions Points prizes allowed in this area will be shown
+            above.<br />
+            All other winners will receive £10 Champions Points. Use this
+            setting to control how many £25 prizes are available in each area.
           </p>
         </div>
       </section>
-    </div>
+    </section>
 
-    <!-- BOTTOM: FULL-WIDTH PLAYERS PANEL -->
-    <section class="card admin-users-card">
+    <!-- PLAYERS TABLE -->
+    <section class="card card-admin card-wide">
       <div class="card-header">
-        <h2>Players</h2>
-        Players in <span id="playersAreaLabel">SW1</span> (0)
+        <h2>Players in <span id="playersAreaLabel">SW1</span></h2>
       </div>
 
       <div class="card-body">
         <div class="table-wrapper">
-          <table class="players-table">
+          <table class="table table-admin">
             <thead>
               <tr>
                 <th>
@@ -148,11 +163,13 @@
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="playersTableBody"></tbody>
+            <tbody id="playersTableBody">
+              <!-- Filled by admin.js -->
+            </tbody>
           </table>
         </div>
 
-        <p id="usersStatus" class="status"></p>
+        <p id="playersEmptyMessage" class="helper-text"></p>
       </div>
     </section>
   </main>
